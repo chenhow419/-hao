@@ -16,7 +16,7 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* 強制設定全域深色背景，解決白底白字看不見的問題 */
+    /* 強制設定全域深色背景與亮色文字 */
     .stApp {
         background-color: #0F172A !important;
     }
@@ -28,10 +28,9 @@ st.markdown("""
         padding-right: 0.8rem !important;
     }
     
-    /* 強制所有文字呈現亮色 */
     body, p, span, div, label { color: #F8FAFC !important; }
     
-    /* 卡片樣式 */
+    /* 卡片與基本面區塊樣式 */
     .trade-card {
         background-color: #1E293B;
         border-radius: 10px;
@@ -39,13 +38,20 @@ st.markdown("""
         text-align: center;
         margin-bottom: 8px;
     }
+    .info-box {
+        background-color: #1E293B;
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 12px;
+        border: 1px solid #334155;
+    }
     .buy-border { border: 1.5px solid #10B981; }
     .sell-border { border: 1.5px solid #EF4444; }
     .stop-border { border: 1.5px solid #F59E0B; }
     .etf-border { border: 1.5px solid #38BDF8; }
     
     .card-title { font-size: 11px; color: #94A3B8 !important; margin-bottom: 2px; }
-    .card-val { font-size: 16px; font-weight: bold; }
+    .card-val { font-size: 15px; font-weight: bold; }
     
     .tag {
         background-color: #334155;
@@ -102,7 +108,32 @@ def fetch_market_indices():
             pass
     return data
 
-# ----------------- 3. 動態爬取 Yahoo 股市即時熱門成交量排行 -----------------
+# ----------------- 3. 取得公司詳細基本面與名稱 -----------------
+@st.cache_data(ttl=3600)
+def get_company_details(symbol):
+    try:
+        t = yf.Ticker(symbol)
+        info = t.info
+        name = info.get("longName") or info.get("shortName") or symbol
+        return {
+            "name": name,
+            "sector": info.get("sector", "未提供"),
+            "industry": info.get("industry", "未提供"),
+            "summary": info.get("longBusinessSummary", "暫無公司簡介資料。"),
+            "market_cap": info.get("marketCap", 0),
+            "pe_ratio": info.get("trailingPE", "N/A"),
+            "dividend_yield": info.get("dividendYield", 0),
+            "high_52": info.get("fiftyTwoWeekHigh", "N/A"),
+            "low_52": info.get("fiftyTwoWeekLow", "N/A")
+        }
+    except:
+        return {
+            "name": symbol, "sector": "未提供", "industry": "未提供", 
+            "summary": "暫無公司簡介資料。", "market_cap": 0, 
+            "pe_ratio": "N/A", "dividend_yield": 0, "high_52": "N/A", "low_52": "N/A"
+        }
+
+# ----------------- 4. 動態爬取熱門股並結合公司名稱 -----------------
 @st.cache_data(ttl=300)
 def fetch_realtime_hot_stocks():
     hot_symbols = []
@@ -137,10 +168,16 @@ def fetch_realtime_hot_stocks():
                 pp = hist["Close"].iloc[-2]
                 vol = hist["Volume"].iloc[-1]
                 pct = ((cp - pp) / pp) * 100
-                name = sym.replace(".TW", "").replace(".TWO", "")
+                code = sym.replace(".TW", "").replace(".TWO", "")
+                
+                # 取得公司名稱
+                details = get_company_details(sym)
+                full_name = details["name"]
+                
                 data_list.append({
                     "symbol": sym,
-                    "code": name,
+                    "code": code,
+                    "name": full_name,
                     "price": round(cp, 2),
                     "pct": round(pct, 2),
                     "volume": vol
@@ -151,7 +188,7 @@ def fetch_realtime_hot_stocks():
     data_list = sorted(data_list, key=lambda x: x["volume"], reverse=True)
     return data_list
 
-# ----------------- 4. UI 介面呈現 -----------------
+# ----------------- 5. UI 介面呈現 -----------------
 st.title("📈 股市行情 Pro")
 
 # 顯示大盤指數區塊
@@ -184,7 +221,7 @@ if tab_choice == "🔥 即時成交量熱門榜":
 else:
     display_stocks = sorted(raw_hot_data, key=lambda x: x["pct"], reverse=True)[:5]
 
-st.caption("📱 點擊下方即時熱門股，直接載入 K 線分析：")
+st.caption("📱 點擊下方即時熱門股，直接載入公司基本面與 K 線分析：")
 
 for idx, item in enumerate(display_stocks):
     sign = "+" if item["pct"] >= 0 else ""
@@ -194,7 +231,7 @@ for idx, item in enumerate(display_stocks):
     with col_info:
         st.markdown(f"""
             <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                <span class="tag">{tag_type}</span>{item['code']}
+                <span class="tag">{tag_type}</span>{item['code']} {item['name']}
             </div>
             <div style="font-size:13px; color:#CBD5E1; margin-top: 2px;">
                 成交價: <span style="color:#38BDF8; font-weight:bold;">${item['price']}</span>
@@ -212,8 +249,8 @@ for idx, item in enumerate(display_stocks):
 
 st.divider()
 
-# ----------------- 5. 個股與 ETF 個別分析 -----------------
-st.subheader("🔍 個股 / ETF 買賣點與風控")
+# ----------------- 6. 個股與 ETF 個別分析 & 基本面 -----------------
+st.subheader("🔍 個股 / ETF 買賣點與公司基本面")
 
 user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 0050)", value=st.session_state.selected_symbol)
 symbol = resolve_symbol(user_input)
@@ -229,11 +266,39 @@ if symbol:
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="1y")
+        details = get_company_details(symbol)
 
         if df.empty or len(df) < 30:
             st.error("查無資料，請確認輸入代碼正確！")
         else:
             is_etf = symbol.startswith("00") or "ETF" in symbol.upper()
+
+            # 顯示公司基本面資訊卡片
+            market_cap_val = details['market_cap']
+            market_cap_str = f"{market_cap_val / 1e8:,.1f} 億" if market_cap_val and market_cap_val > 0 else "N/A"
+            div_yield = details['dividend_yield']
+            div_yield_str = f"{div_yield * 100:.2f}%" if div_yield and div_yield > 0 else "N/A"
+            pe_str = f"{details['pe_ratio']:.2f}" if isinstance(details['pe_ratio'], (int, float)) else "N/A"
+
+            st.markdown(f"""
+                <div class="info-box">
+                    <div style="font-size: 18px; font-weight: bold; color: #38BDF8; margin-bottom: 6px;">
+                        {details['name']} ({symbol})
+                    </div>
+                    <div style="font-size: 13px; color: #94A3B8; margin-bottom: 10px;">
+                        產業類別：{details['sector']} / {details['industry']}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 10px;">
+                        <div><span style="color:#94A3B8; font-size:11px;">市值</span><br><b>{market_cap_str}</b></div>
+                        <div><span style="color:#94A3B8; font-size:11px;">本益比 (PE)</span><br><b>{pe_str}</b></div>
+                        <div><span style="color:#94A3B8; font-size:11px;">殖利率</span><br><b>{div_yield_str}</b></div>
+                        <div><span style="color:#94A3B8; font-size:11px;">52週高/低</span><br><b>${details['high_52']} / ${details['low_52']}</b></div>
+                    </div>
+                    <div style="font-size: 12px; color: #CBD5E1; border-top: 1px solid #334155; padding-top: 8px;">
+                        <b>公司簡介：</b> {details['summary'][:150]}...
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
             df["MA20"] = df["Close"].rolling(20).mean()
             df["MA60"] = df["Close"].rolling(60).mean()
@@ -250,7 +315,6 @@ if symbol:
             target_sell = round(latest["Upper"], 2)
 
             if is_etf:
-                st.info(f"📊 標的：{symbol} | 當前市價：${close_p} (ETF 模式)")
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown(f'<div class="trade-card buy-border"><div class="card-title">月線分批</div><div class="card-val" style="color:#10B981">${ma20_val}</div></div>', unsafe_allow_html=True)
@@ -263,7 +327,6 @@ if symbol:
                 buy_high = ma20_val
                 stop_loss = round(min(ma60_val * 0.97, latest["Lower"]), 2)
 
-                st.info(f"📌 標的：{symbol} | 當前市價：${close_p}")
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown(f'<div class="trade-card buy-border"><div class="card-title">建議買區</div><div class="card-val" style="color:#10B981">${buy_high}</div></div>', unsafe_allow_html=True)
