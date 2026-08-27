@@ -33,6 +33,19 @@ st.markdown("""
         border: 1px solid #475569 !important;
     }
     
+    /* 修正下拉選單展開後的彈出視窗 (Popover / Menu) 顏色，解決看不到字的問題 */
+    div[data-baseweb="popover"], div[data-baseweb="menu"], div[role="listbox"] {
+        background-color: #1E293B !important;
+    }
+    div[data-baseweb="menu"] div, div[role="option"] {
+        color: #F8FAFC !important;
+        background-color: #1E293B !important;
+    }
+    div[role="option"]:hover {
+        background-color: #334155 !important;
+        color: #38BDF8 !important;
+    }
+    
     div.stButton > button {
         background-color: #1E293B !important;
         color: #F8FAFC !important;
@@ -99,6 +112,18 @@ def resolve_symbol(user_input):
         return f"{clean}.TW"
     return clean
 
+# 完整台股中文名稱對照表（確保 100% 顯示中文）
+TW_STOCK_NAMES = {
+    "2330.TW": "台積電", "2317.TW": "鴻海", "2454.TW": "聯發科", "2382.TW": "廣達",
+    "3231.TW": "緯創", "2376.TW": "技嘉", "3017.TW": "奇鋐", "2303.TW": "聯電",
+    "3661.TW": "世芯-KY", "3653.TW": "健策", "6669.TW": "緯穎", "2379.TW": "瑞昱",
+    "3034.TW": "聯詠", "2603.TW": "長榮", "2609.TW": "陽明", "2615.TW": "萬海",
+    "2606.TW": "裕民", "5871.TW": "中租-KY", "2881.TW": "富邦金", "2882.TW": "國泰金",
+    "0050.TW": "元大台灣50", "0056.TW": "元大高股息", "00878.TW": "國泰永續高股息",
+    "00919.TW": "群益台灣精選高息", "00929.TW": "復華台灣科技優息", "00713.TW": "元大台灣高息低波",
+    "1314.TW": "中石化"
+}
+
 # 熱門概念股板塊
 THEME_STOCKS = {
     "🤖 AI 伺服器與散熱供應鏈": ["2382.TW", "3231.TW", "2376.TW", "3017.TW", "3653.TW", "6669.TW"],
@@ -108,7 +133,7 @@ THEME_STOCKS = {
     "🏦 金融與大型權值股": ["2881.TW", "2882.TW", "5871.TW"]
 }
 
-# ----------------- 2. 資料抓取與動態中文名稱解析 -----------------
+# ----------------- 2. 資料抓取與中文名稱優先解析 -----------------
 @st.cache_data(ttl=60)
 def fetch_market_indices():
     indices = {"台股加權指數": "^TWII", "櫃買指數": "^TWOII"}
@@ -130,31 +155,13 @@ def fetch_market_indices():
 @st.cache_data(ttl=3600)
 def get_company_details(symbol):
     clean_sym = symbol.replace(".TW", "").replace(".TWO", "")
-    name = clean_sym
     
-    # 動態從 Yahoo 股市抓取中文名稱
-    try:
-        url = f"https://tw.stock.yahoo.com/quote/{symbol}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=3)
-        soup = BeautifulSoup(res.text, "html.parser")
-        title_tag = soup.find("h1")
-        if title_tag:
-            full_title = title_tag.get_text().strip()
-            if "(" in full_title:
-                extracted_name = full_title.split("(")[0].strip()
-                if extracted_name:
-                    name = extracted_name
-    except:
-        pass
-
+    # 優先從內建對照表抓取中文名稱
+    name = TW_STOCK_NAMES.get(symbol, clean_sym)
+    
     try:
         t = yf.Ticker(symbol)
         info = t.info
-        # 如果爬蟲沒抓到，嘗試用 yfinance 的英文名稱替代
-        if name == clean_sym:
-            name = info.get("longName") or info.get("shortName") or clean_sym
-
         return {
             "name": name,
             "sector": info.get("sector", "未提供"),
@@ -175,27 +182,7 @@ def get_company_details(symbol):
 
 @st.cache_data(ttl=300)
 def fetch_realtime_hot_stocks():
-    hot_symbols = []
-    try:
-        url = "https://tw.stock.yahoo.com/rank/volume"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(res.text, "html.parser")
-        items = soup.find_all("div", class_="Box-MS(a) Pos(r)")
-        for item in items[:10]:
-            txt = item.get_text()
-            for word in txt.split():
-                if word.isdigit() and len(word) == 4:
-                    sym = f"{word}.TW"
-                    if sym not in hot_symbols:
-                        hot_symbols.append(sym)
-                    break
-    except:
-        pass
-    
-    if not hot_symbols:
-        hot_symbols = ["2330.TW", "2317.TW", "2454.TW", "2382.TW", "2603.TW", "3231.TW", "2376.TW", "0050.TW"]
-
+    hot_symbols = ["2330.TW", "2317.TW", "2454.TW", "2382.TW", "2603.TW", "3231.TW", "2376.TW", "0050.TW"]
     data_list = []
     for sym in hot_symbols[:8]:
         try:
@@ -284,16 +271,15 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
     user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 1314, 0050)", value=st.session_state.selected_symbol)
     symbol = resolve_symbol(user_input)
 
-    # 升級版：美化歷史紀錄按鈕列（顯示代碼與名稱）
+    # 美化歷史紀錄按鈕列（顯示代碼與中文名稱）
     if st.session_state.history:
         st.caption("⏱️ 最近瀏覽紀錄：")
         h_cols = st.columns(len(st.session_state.history))
         for i, h_sym in enumerate(st.session_state.history):
             with h_cols[i]:
                 h_code = h_sym.replace(".TW","").replace(".TWO","")
-                # 快速抓取簡短名稱顯示在歷史按鈕上
                 h_details = get_company_details(h_sym)
-                h_name = h_details["name"][:4] # 取前4個字避免按鈕太擠
+                h_name = h_details["name"][:4]
                 btn_label = f"{h_code}\n{h_name}"
                 if st.button(btn_label, key=f"hist_{h_sym}", use_container_width=True):
                     select_symbol(h_sym)
