@@ -292,9 +292,11 @@ def fetch_watchlist_cached(symbols_tuple):
 # ----------------- 3. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
 
-st.session_state.nav_page = st.radio(
+# 關鍵修復：加入 key="nav_page"，讓 st.radio 與 session_state 正確同步狀態
+st.radio(
     "功能頁籤",
     ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"],
+    key="nav_page",
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -543,7 +545,6 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                         st.rerun()
                 st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
             else:
-                # 靜默略過或顯示精簡提示，不再跳出干擾警告框
                 pass
 
 
