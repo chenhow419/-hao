@@ -89,7 +89,6 @@ st.markdown("""
         margin-right: 6px;
     }
     
-    /* 模仿券商 App 的選股分類網格按鈕 */
     .grid-card {
         background-color: #1E293B;
         border: 1px solid #334155;
@@ -113,8 +112,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# 狀態初始化
 if "history" not in st.session_state:
     st.session_state.history = ["2330.TW", "0050.TW"]
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = ["2330.TW", "0050.TW", "2317.TW", "2454.TW"]
 if "selected_symbol" not in st.session_state:
     st.session_state.selected_symbol = "2330.TW"
 if "nav_page" not in st.session_state:
@@ -247,7 +249,7 @@ st.title("📈 股市行情 Pro")
 
 st.session_state.nav_page = st.radio(
     "功能頁籤",
-    ["📈 即時行情與個股分析", "🏷️ 排行選股專區"],
+    ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"],
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -309,6 +311,20 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 
     user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 1314, 0050)", value=st.session_state.selected_symbol)
     symbol = resolve_symbol(user_input)
+
+    # 加入或移出自選快捷按鈕
+    col_w1, col_w2 = st.columns(2)
+    with col_w1:
+        if symbol not in st.session_state.watchlist:
+            if st.button("⭐ 加入我的自選股", use_container_width=True):
+                st.session_state.watchlist.append(symbol)
+                st.success(f"已將 {symbol} 加入自選！")
+                st.rerun()
+        else:
+            if st.button("🗑️ 從自選股移除", use_container_width=True):
+                st.session_state.watchlist.remove(symbol)
+                st.warning(f"已將 {symbol} 移除自選！")
+                st.rerun()
 
     if st.session_state.history:
         st.caption("⏱️ 最近瀏覽紀錄：")
@@ -408,16 +424,14 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
             st.error(f"資料取得失敗：{e}")
 
 
-# ================= 頁面二：排行選股專區 (仿 App 網格與清單介面) =================
+# ================= 頁面二：排行選股專區 =================
 elif st.session_state.nav_page == "🏷️ 排行選股專區":
     st.subheader("📊 智慧排行選股中心")
     
-    # 如果尚未選擇具體板塊，顯示 2x3 網格卡片選單（對應圖片一）
     if st.session_state.selected_theme is None:
         st.caption("請選擇下方熱門選股維度，快速檢視精選標的：")
         
         themes = list(THEME_STOCKS.keys())
-        # 以 2 欄網格排列
         for i in range(0, len(themes), 2):
             cols = st.columns(2)
             for j in range(2):
@@ -436,7 +450,6 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                             st.session_state.selected_theme = t_name
                             st.rerun()
     else:
-        # 進入特定板塊後的股票清單（對應圖片二的清單與標籤設計）
         current_theme = st.session_state.selected_theme
         
         col_back, col_title = st.columns([1, 4])
@@ -465,7 +478,6 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                     color = "#10B981" if pct >= 0 else "#EF4444"
                     code = sym.replace(".TW", "").replace(".TWO", "")
                     
-                    # 模擬券商的專業標籤 (如存股族比例、EPS篩選等)
                     custom_tag = "71%存股族加入自選" if code.startswith("00") else ("EPS>3 優質股" if cp > 100 else "高殖利率關注")
 
                     col_info, col_btn = st.columns([2.5, 1])
@@ -488,6 +500,72 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                             select_symbol(sym)
                             st.session_state.nav_page = "📈 即時行情與個股分析"
                             st.session_state.selected_theme = None
+                            st.rerun()
+                    st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
+            except:
+                st.warning(f"無法取得 {sym} 的相關資訊")
+
+
+# ================= 頁面三：我的自選股 =================
+elif st.session_state.nav_page == "⭐ 我的自選股":
+    st.subheader("⭐ 我的自選股清單")
+    st.caption("追蹤您專屬的自選標的，即時掌握最新價格與漲跌幅：")
+
+    # 快速新增自選股
+    col_add_input, col_add_btn = st.columns([3, 1])
+    with col_add_input:
+        new_watch_input = st.text_input("輸入代碼新增自選", placeholder="例如: 2317 或 00878", label_visibility="collapsed")
+    with col_add_btn:
+        if st.button("➕ 加入", use_container_width=True):
+            if new_watch_input:
+                resolved = resolve_symbol(new_watch_input)
+                if resolved not in st.session_state.watchlist:
+                    st.session_state.watchlist.append(resolved)
+                    st.success(f"已新增 {resolved}")
+                    st.rerun()
+                else:
+                    st.warning("該標的已在清單中")
+
+    st.markdown('<div style="border-bottom: 1px solid #334155; margin: 10px 0;"></div>', unsafe_allow_html=True)
+
+    if not st.session_state.watchlist:
+        st.info("目前尚無自選股，請透過上方輸入框新增，或從個股分析頁面加入！")
+    else:
+        for sym in list(st.session_state.watchlist):
+            try:
+                t = yf.Ticker(sym)
+                hist = t.history(period="2d")
+                details = get_company_details(sym)
+                if len(hist) >= 2:
+                    cp = hist["Close"].iloc[-1]
+                    pp = hist["Close"].iloc[-2]
+                    pct = ((cp - pp) / pp) * 100
+                    sign = "+" if pct >= 0 else ""
+                    color = "#10B981" if pct >= 0 else "#EF4444"
+                    code = sym.replace(".TW", "").replace(".TWO", "")
+                    tag_type = "ETF" if code.startswith("00") else "股票"
+                    
+                    col_info, col_btn1, col_btn2 = st.columns([2.2, 1, 1])
+                    with col_info:
+                        st.markdown(f"""
+                            <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
+                                <span class="tag">{tag_type}</span>{code} {details['name']}
+                            </div>
+                            <div style="font-size:14px; margin-top:2px;">
+                                <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
+                                <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    with col_btn1:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("詳細分析", key=f"watch_goto_{sym}", use_container_width=True):
+                            select_symbol(sym)
+                            st.session_state.nav_page = "📈 即時行情與個股分析"
+                            st.rerun()
+                    with col_btn2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("刪除", key=f"watch_del_{sym}", use_container_width=True):
+                            st.session_state.watchlist.remove(sym)
                             st.rerun()
                     st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
             except:
