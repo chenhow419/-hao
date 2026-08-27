@@ -4,16 +4,22 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# 1. 頁面設定
+# ----------------- 1. 頁面設定 & PWA 支援 -----------------
 st.set_page_config(
-    page_title="股票買點分析儀",
+    page_title="股票買點分析儀 Pro",
     page_icon="📈",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# 自訂 CSS 手機最佳化與高對比卡片
+# 注入 PWA 與 Mobile App 優化 Meta Header 及自訂 CSS
 st.markdown("""
+    <head>
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="theme-color" content="#0F172A">
+        <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2422/2422796.png">
+    </head>
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -23,15 +29,79 @@ st.markdown("""
         background-color: #1E293B;
         border: 2px solid #10B981;
         border-radius: 12px;
-        padding: 15px;
+        padding: 12px;
         text-align: center;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
     }
-    .buy-title { font-size: 14px; color: #94A3B8; margin-bottom: 5px; }
-    .buy-price { font-size: 22px; font-weight: bold; color: #10B981; }
-    .sell-price { font-size: 22px; font-weight: bold; color: #EF4444; }
+    .sell-card {
+        background-color: #1E293B;
+        border: 2px solid #EF4444;
+        border-radius: 12px;
+        padding: 12px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .stop-card {
+        background-color: #1E293B;
+        border: 2px solid #F59E0B;
+        border-radius: 12px;
+        padding: 12px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .card-title { font-size: 13px; color: #94A3B8; margin-bottom: 4px; }
+    .card-val-green { font-size: 20px; font-weight: bold; color: #10B981; }
+    .card-val-red { font-size: 20px; font-weight: bold; color: #EF4444; }
+    .card-val-yellow { font-size: 20px; font-weight: bold; color: #F59E0B; }
+    
+    .metric-badge {
+        background-color: #334155;
+        color: #E2E8F0;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        margin-right: 6px;
+        display: inline-block;
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# 初始化 Session State
+if "history" not in st.session_state:
+    st.session_state.history = ["2330.TW", "2382.TW", "0050.TW"]
+if "selected_theme" not in st.session_state:
+    st.session_state.selected_theme = "🚀 AI 伺服器"
+if "selected_symbol" not in st.session_state:
+    st.session_state.selected_symbol = "2330.TW"
+
+def select_symbol(sym):
+    st.session_state.selected_symbol = sym
+    # 更新歷史紀錄 (保持最多 5 筆)
+    if sym in st.session_state.history:
+        st.session_state.history.remove(sym)
+    st.session_state.history.insert(0, sym)
+    st.session_state.history = st.session_state.history[:5]
+
+# ----------------- 🎯 常用台股名稱與代碼對照表 -----------------
+STOCK_DICT = {
+    "台積電": "2330.TW", "鴻海": "2317.TW", "聯發科": "2454.TW", "廣達": "2382.TW",
+    "緯創": "3231.TW", "技嘉": "2376.TW", "華城": "1519.TW", "奇鋐": "3017.TW",
+    "萬潤": "6187.TWO", "弘塑": "3131.TWO", "聯亞": "3081.TWO", "光聖": "6442.TW",
+    "國統": "8936.TWO", "世芯": "3661.TW", "緯穎": "6669.TW",
+    "元大台灣50": "0050.TW", "0050": "0050.TW", "元大高股息": "0056.TW", "0056": "0056.TW",
+    "國泰永續高股息": "00878.TW", "00878": "00878.TW", "群益台灣精選高息": "00919.TW", "00919": "00919.TW",
+    "復華台灣科技優息": "00929.TW", "00929": "00929.TW", "富邦台50": "006208.TW", "006208": "006208.TW"
+}
+
+def resolve_symbol(user_input):
+    clean_input = user_input.strip()
+    if clean_input in STOCK_DICT:
+        return STOCK_DICT[clean_input]
+    # 若為純數字台股代碼，預設補 .TW
+    if clean_input.isdigit():
+        if len(clean_input) == 4:
+            return f"{clean_input}.TW"
+    return clean_input.upper()
 
 # ----------------- 🎯 大盤指數 -----------------
 st.subheader("🌐 市場大盤速報")
@@ -68,17 +138,16 @@ for i, (name, (val, pct)) in enumerate(market_data.items()):
 
 st.divider()
 
-# ----------------- 🎯 新增：強勢/漲停焦點股速覽 -----------------
+# ----------------- 🎯 今日強勢/接近漲停股 -----------------
 st.subheader("🚨 今日強勢/接近漲停股")
 
 @st.cache_data(ttl=120)
 def get_limit_up_stocks():
-    # 監控熱門指標股票，即時運算漲幅接近 9.5%~10% 的股票
     watch_list = [
         ("台積電", "2330.TW"), ("鴻海", "2317.TW"), ("廣達", "2382.TW"),
         ("華城", "1519.TW"), ("奇鋐", "3017.TW"), ("萬潤", "6187.TWO"),
         ("弘塑", "3131.TWO"), ("聯亞", "3081.TWO"), ("光聖", "6442.TW"),
-        ("國統", "8936.TWO"), ("世芯-KY", "3661.TW"), ("緯穎", "6669.TW")
+        ("世芯-KY", "3661.TW"), ("緯穎", "6669.TW")
     ]
     strong_stocks = []
     for name, sym in watch_list:
@@ -88,66 +157,49 @@ def get_limit_up_stocks():
                 cp = df_s["Close"].iloc[-1]
                 pp = df_s["Close"].iloc[-2]
                 pct = ((cp - pp) / pp) * 100
-                # 篩選當日漲幅高於 5% 的強勢/漲停股
-                if pct >= 5.0:
+                if pct >= 4.0:
                     strong_stocks.append((name, sym, round(cp, 1), round(pct, 2)))
         except:
             pass
     return strong_stocks
 
 strong_list = get_limit_up_stocks()
-
 if strong_list:
     limit_cols = st.columns(min(len(strong_list), 4))
     for idx, (name, sym, p, pct) in enumerate(strong_list[:4]):
         with limit_cols[idx % 4]:
             st.button(
                 f"🔥 {name}\n${p} (+{pct}%)", 
-                on_click=lambda s=sym: st.session_state.update({"selected_symbol": s}),
+                on_click=select_symbol, args=(sym,),
                 use_container_width=True,
                 key=f"limit_{sym}"
             )
 else:
-    st.info("💡 目前盤中監控無觸及漲停之大型熱門股，或市場處於盤整狀態。")
+    st.info("💡 目前盤中監控無觸及漲停或強勢衝高之標的。")
 
 st.divider()
 
 # ----------------- 🎯 熱門題材與 ETF 分類 -----------------
 st.subheader("🔥 今日熱門題材 & 熱門 ETF")
 
-# 整合概念股與熱門 ETF 清單
 theme_stocks = {
     "🚀 AI 伺服器": [("廣達", "2382.TW"), ("緯創", "3231.TW"), ("技嘉", "2376.TW"), ("英業達", "2356.TW")],
-    "⚡ CoWoS 先進封裝": [("台積電", "2330.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW")],
+    "⚡ CoWoS 封裝": [("台積電", "2330.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW")],
     "💡 矽光子 (CPO)": [("聯亞", "3081.TWO"), ("華星光", "4979.TWO"), ("光聖", "6442.TW"), ("上銓", "3363.TWO")],
-    "📊 高股息 ETF": [("元大高股息", "0056.TW"), ("國泰永續高股息", "00878.TW"), ("復華台灣科技優息", "00929.TW"), ("群益台灣精選高息", "00919.TW")],
-    "🌐 市值型/美股 ETF": [("元大台灣50", "0050.TW"), ("富邦台50", "006208.TW"), ("國泰費城半導體", "00830.TW"), ("元大S&P500", "00646.TW")]
+    "📊 高股息 ETF": [("元大高股息", "0056.TW"), ("國泰00878", "00878.TW"), ("復華00929", "00929.TW"), ("群益00919", "00919.TW")],
+    "🌐 市值型 ETF": [("元大台灣50", "0050.TW"), ("富邦006208", "006208.TW"), ("費半00830", "00830.TW"), ("S&P00646", "00646.TW")]
 }
 
-if "selected_theme" not in st.session_state:
-    st.session_state.selected_theme = "🚀 AI 伺服器"
-if "selected_symbol" not in st.session_state:
-    st.session_state.selected_symbol = "2382.TW"
-
-def change_theme(t_name):
-    st.session_state.selected_theme = t_name
-
-def select_stock(sym):
-    st.session_state.selected_symbol = sym
-
-# 1. 顯示題材切換按鈕
 t_cols = st.columns(len(theme_stocks))
 for idx, t_name in enumerate(theme_stocks.keys()):
     with t_cols[idx]:
         st.button(
             t_name, 
-            on_click=change_theme, 
-            args=(t_name,), 
+            on_click=lambda t=t_name: st.session_state.update({"selected_theme": t}), 
             use_container_width=True,
             type="primary" if st.session_state.selected_theme == t_name else "secondary"
         )
 
-# 2. 抓取當前分類標的價格
 @st.cache_data(ttl=60)
 def get_theme_prices(stock_list):
     prices = {}
@@ -168,8 +220,7 @@ def get_theme_prices(stock_list):
 current_stocks = theme_stocks[st.session_state.selected_theme]
 stock_prices = get_theme_prices(current_stocks)
 
-# 3. 顯示相關概念股/ETF 按鈕
-st.markdown(f"**📌【{st.session_state.selected_theme}】標的（點擊直接分析）：**")
+st.markdown(f"**📌【{st.session_state.selected_theme}】標的：**")
 s_cols = st.columns(len(current_stocks))
 
 for idx, (name, sym) in enumerate(current_stocks):
@@ -181,69 +232,117 @@ for idx, (name, sym) in enumerate(current_stocks):
     with col:
         st.button(
             btn_label, 
-            on_click=select_stock, 
-            args=(sym,), 
+            on_click=select_symbol, args=(sym,),
             use_container_width=True, 
             key=f"stock_btn_{sym}"
         )
 
 st.divider()
 
-# ----------------- 🎯 個股/ETF 買點分析 -----------------
+# ----------------- 🎯 個股與 ETF 買點 + 基本面 + 風控分析 -----------------
 st.subheader("🔍 個股與 ETF 合理買點分析")
 
-symbol = st.text_input("輸入股票/ETF代碼：", value=st.session_state.selected_symbol).upper().strip()
+# 顯示歷史瀏覽紀錄快捷鈕
+if st.session_state.history:
+    st.caption("🕒 最近瀏覽歷史：")
+    h_cols = st.columns(len(st.session_state.history))
+    for idx, h_sym in enumerate(st.session_state.history):
+        with h_cols[idx]:
+            st.button(h_sym, on_click=select_symbol, args=(h_sym,), key=f"hist_{h_sym}_{idx}")
+
+# 輸入框（支援中文與代碼）
+user_input = st.text_input("輸入股票名稱或代碼（支援：台積電、廣達、2330、0050 等）：", value=st.session_state.selected_symbol)
+symbol = resolve_symbol(user_input)
 
 if st.button("🚀 開始計算與繪製 K 線圖", use_container_width=True) or symbol:
-    with st.spinner("載入數據中..."):
+    with st.spinner("載入數據與基本面分析中..."):
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period="1y", interval="1d")
 
             if df.empty or len(df) < 60:
-                st.error("找不到資料或數據不足，請確認代碼！")
+                st.error("找不到資料或數據不足，請確認代碼/名稱！")
             else:
-                # 指標計算
+                # 記錄到歷史
+                if symbol not in st.session_state.history:
+                    st.session_state.history.insert(0, symbol)
+                    st.session_state.history = st.session_state.history[:5]
+
+                # 技術指標計算
                 df["MA20"] = df["Close"].rolling(20).mean()
                 df["MA60"] = df["Close"].rolling(60).mean()
                 df["STD20"] = df["Close"].rolling(20).std()
                 df["Upper_Band"] = df["MA20"] + (df["STD20"] * 2)
+                df["Lower_Band"] = df["MA20"] - (df["STD20"] * 2)
 
                 latest = df.iloc[-1]
                 close_p = round(latest["Close"], 2)
                 ma20_val = round(latest["MA20"], 2)
                 ma60_val = round(latest["MA60"], 2)
-                target_sell = round(latest["Upper_Band"], 2)
-
+                
+                # 風控與買賣點設定
                 buy_low = round(max(ma60_val, ma20_val * 0.98), 2)
                 buy_high = ma20_val
+                target_sell = round(latest["Upper_Band"], 2)
+                stop_loss = round(min(ma60_val * 0.97, latest["Lower_Band"]), 2) # 建議停損點
 
-                col1, col2 = st.columns(2)
-                with col1:
+                # 計算風險報酬比 (R/R Ratio)
+                potential_gain = target_sell - close_p
+                potential_risk = close_p - stop_loss
+                rr_ratio = round(potential_gain / potential_risk, 2) if potential_risk > 0 else 0
+
+                # 基本面速覽抓取
+                try:
+                    info = ticker.info
+                    pe_ratio = round(info.get("trailingPE", 0), 1) if info.get("trailingPE") else "N/A"
+                    yield_pct = round(info.get("dividendYield", 0) * 100, 2) if info.get("dividendYield") else "N/A"
+                    short_name = info.get("shortName", symbol)
+                except:
+                    pe_ratio, yield_pct, short_name = "N/A", "N/A", symbol
+
+                # 顯示基本面標籤卡
+                st.markdown(f"""
+                <div style="margin-bottom: 12px;">
+                    <span class="metric-badge">標的：{short_name} ({symbol})</span>
+                    <span class="metric-badge">本益比 (PE)：{pe_ratio}</span>
+                    <span class="metric-badge">殖利率：{yield_pct}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 三卡片（建議買區、動態停利、建議停損）
+                c1, c2, c3 = st.columns(3)
+                with c1:
                     st.markdown(f"""
                         <div class="buy-card">
-                            <div class="buy-title">🟢 建議買入區間</div>
-                            <div class="buy-price">{buy_low} ~ {buy_high} 元</div>
+                            <div class="card-title">🟢 建議買入區</div>
+                            <div class="card-val-green">{buy_low}~{buy_high}</div>
                         </div>
                     """, unsafe_allow_html=True)
-                
-                with col2:
+                with c2:
                     st.markdown(f"""
-                        <div class="buy-card" style="border-color: #EF4444;">
-                            <div class="buy-title">🔴 動態停利目標</div>
-                            <div class="sell-price">{target_sell} 元</div>
+                        <div class="sell-card">
+                            <div class="card-title">🔴 動態停利價</div>
+                            <div class="card-val-red">{target_sell} 元</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with c3:
+                    st.markdown(f"""
+                        <div class="stop-card">
+                            <div class="card-title">🟠 建議停損價</div>
+                            <div class="card-val-yellow">{stop_loss} 元</div>
                         </div>
                     """, unsafe_allow_html=True)
 
+                # 風險報酬評估
                 if close_p <= buy_high and close_p >= buy_low:
-                    st.success(f"🎯 現價 {close_p} 元已進入合理買點區，可分批佈局！")
+                    st.success(f"🎯 現價 {close_p} 元處於合理買區！風報比 (R/R)：{rr_ratio}（> 1.5 適合分批進場）。")
                 elif close_p < buy_low:
-                    st.warning(f"⚠️ 現價 {close_p} 元低於買區，留意破位風險，勿急著接刀。")
+                    st.warning(f"⚠️ 現價 {close_p} 元已跌破買區，請確認是否觸及停損點 ({stop_loss} 元)。")
                 else:
                     diff_pct = round(((close_p - buy_high) / buy_high) * 100, 1)
-                    st.info(f"⏳ 現價 {close_p} 元偏高（高於買區 {diff_pct}%），建議等待拉回。")
+                    st.info(f"⏳ 現價 {close_p} 元偏高（高於買區 {diff_pct}%），當前風報比僅 {rr_ratio}，建議等待拉回。")
 
-                # K 線圖繪製 (Plotly 拖動式)
+                # K 線圖繪製 (Plotly 互動式)
                 fig = make_subplots(
                     rows=2, cols=1, 
                     shared_xaxes=True, 
@@ -253,16 +352,15 @@ if st.button("🚀 開始計算與繪製 K 線圖", use_container_width=True) or
                 )
 
                 fig.add_trace(go.Candlestick(
-                    x=df.index,
-                    open=df['Open'], high=df['High'],
-                    low=df['Low'], close=df['Close'],
-                    name='K線'
+                    x=df.index, open=df['Open'], high=df['High'],
+                    low=df['Low'], close=df['Close'], name='K線'
                 ), row=1, col=1)
 
                 fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], mode='lines', name='20MA', line=dict(color='#FFD700', width=1.5)), row=1, col=1)
                 fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], mode='lines', name='60MA', line=dict(color='#00FF7F', width=1.5)), row=1, col=1)
                 fig.add_trace(go.Scatter(x=df.index, y=df['Upper_Band'], mode='lines', name='上軌停利', line=dict(color='#FF3366', width=1.5)), row=1, col=1)
 
+                # 繪製買區區間 (半透明綠色)
                 fig.add_hrect(
                     y0=buy_low, y1=buy_high,
                     fillcolor="#00FF7F", opacity=0.15,
@@ -276,7 +374,7 @@ if st.button("🚀 開始計算與繪製 K 線圖", use_container_width=True) or
                 fig.update_layout(
                     template="plotly_dark",
                     xaxis_rangeslider_visible=False,
-                    height=500,
+                    height=480,
                     margin=dict(l=10, r=10, t=40, b=10),
                     hovermode="x unified"
                 )
