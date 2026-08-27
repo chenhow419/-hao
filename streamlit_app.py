@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# ----------------- 1. 頁面設定 & 強制深色主題與按鈕樣式 CSS -----------------
+# ----------------- 1. 頁面設定 & 強制深色主題與組件 CSS -----------------
 st.set_page_config(
     page_title="股市 Pro",
     page_icon="📈",
@@ -27,18 +27,23 @@ st.markdown("""
     
     body, p, span, div, label { color: #F8FAFC !important; }
     
-    /* 按鈕樣式美化 */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #1E293B !important;
+        color: #F8FAFC !important;
+        border: 1px solid #475569 !important;
+    }
+    
     div.stButton > button {
-        background-color: #334155 !important;
+        background-color: #1E293B !important;
         color: #F8FAFC !important;
         border: 1px solid #475569 !important;
         border-radius: 8px !important;
         font-weight: bold !important;
     }
     div.stButton > button:hover {
-        background-color: #475569 !important;
-        color: #FFFFFF !important;
-        border-color: #64748B !important;
+        background-color: #334155 !important;
+        color: #38BDF8 !important;
+        border-color: #38BDF8 !important;
     }
 
     .trade-card {
@@ -94,24 +99,16 @@ def resolve_symbol(user_input):
         return f"{clean}.TW"
     return clean
 
-# 常用台股中文對照字典
-TW_STOCK_NAMES = {
-    "2330.TW": "台積電", "2317.TW": "鴻海", "2454.TW": "聯發科", "2382.TW": "廣達",
-    "3231.TW": "緯創", "2376.TW": "技嘉", "3017.TW": "奇鋐", "2303.TW": "聯電",
-    "3661.TW": "世芯-KY", "2603.TW": "長榮", "2609.TW": "陽明", "2615.TW": "萬海",
-    "0050.TW": "元大台灣50", "0056.TW": "元大高股息", "00878.TW": "國泰永續高股息",
-    "00919.TW": "群益台灣精選高息", "00929.TW": "復華台灣科技優息"
-}
-
-# 熱門概念股分類
+# 熱門概念股板塊
 THEME_STOCKS = {
-    "🤖 AI 伺服器與散熱": ["2382.TW", "3231.TW", "2376.TW", "3017.TW"],
-    "⚡ 半導體與權值": ["2330.TW", "2454.TW", "2303.TW", "3661.TW"],
-    "💰 熱門高股息 ETF": ["0050.TW", "00878.TW", "00919.TW", "00929.TW"],
-    "🚢 航運股": ["2603.TW", "2609.TW", "2615.TW"]
+    "🤖 AI 伺服器與散熱供應鏈": ["2382.TW", "3231.TW", "2376.TW", "3017.TW", "3653.TW", "6669.TW"],
+    "⚡ 半導體與重量級權值": ["2330.TW", "2454.TW", "2303.TW", "3661.TW", "2379.TW", "3034.TW"],
+    "💰 熱門高股息與市值 ETF": ["0050.TW", "0056.TW", "00878.TW", "00919.TW", "00929.TW", "00713.TW"],
+    "🚢 航運與散裝航運": ["2603.TW", "2609.TW", "2615.TW", "2606.TW"],
+    "🏦 金融與大型權值股": ["2881.TW", "2882.TW", "5871.TW"]
 }
 
-# ----------------- 2. 抓取資料函式 -----------------
+# ----------------- 2. 資料抓取與動態中文名稱解析 -----------------
 @st.cache_data(ttl=60)
 def fetch_market_indices():
     indices = {"台股加權指數": "^TWII", "櫃買指數": "^TWOII"}
@@ -132,12 +129,32 @@ def fetch_market_indices():
 
 @st.cache_data(ttl=3600)
 def get_company_details(symbol):
-    name = TW_STOCK_NAMES.get(symbol, symbol)
+    clean_sym = symbol.replace(".TW", "").replace(".TWO", "")
+    name = clean_sym
+    
+    # 動態從 Yahoo 股市抓取中文名稱
+    try:
+        url = f"https://tw.stock.yahoo.com/quote/{symbol}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(url, headers=headers, timeout=3)
+        soup = BeautifulSoup(res.text, "html.parser")
+        title_tag = soup.find("h1")
+        if title_tag:
+            full_title = title_tag.get_text().strip()
+            if "(" in full_title:
+                extracted_name = full_title.split("(")[0].strip()
+                if extracted_name:
+                    name = extracted_name
+    except:
+        pass
+
     try:
         t = yf.Ticker(symbol)
         info = t.info
-        if name == symbol:
-            name = info.get("longName") or info.get("shortName") or symbol
+        # 如果爬蟲沒抓到，嘗試用 yfinance 的英文名稱替代
+        if name == clean_sym:
+            name = info.get("longName") or info.get("shortName") or clean_sym
+
         return {
             "name": name,
             "sector": info.get("sector", "未提供"),
@@ -199,10 +216,9 @@ def fetch_realtime_hot_stocks():
             pass
     return sorted(data_list, key=lambda x: x["volume"], reverse=True)
 
-# ----------------- 3. UI 導航與介面 -----------------
+# ----------------- 3. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
 
-# 頂部獨立頁面切換選單
 st.session_state.nav_page = st.radio(
     "功能頁籤",
     ["📈 即時行情與個股分析", "🏷️ 熱門概念股專區"],
@@ -234,7 +250,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 
     st.divider()
 
-    # 熱門排行清單
     raw_hot_data = fetch_realtime_hot_stocks()
     tab_choice = st.radio("熱門排行", ["🔥 即時成交量熱門榜", "🚀 今日漲幅最強榜"], horizontal=True, label_visibility="collapsed")
 
@@ -264,18 +279,23 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 
     st.divider()
 
-    # 個股分析區塊
     st.subheader("🔍 個股 / ETF 買賣點與公司基本面")
 
-    user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 0050)", value=st.session_state.selected_symbol)
+    user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 1314, 0050)", value=st.session_state.selected_symbol)
     symbol = resolve_symbol(user_input)
 
+    # 升級版：美化歷史紀錄按鈕列（顯示代碼與名稱）
     if st.session_state.history:
-        st.caption("最近瀏覽：")
+        st.caption("⏱️ 最近瀏覽紀錄：")
         h_cols = st.columns(len(st.session_state.history))
         for i, h_sym in enumerate(st.session_state.history):
             with h_cols[i]:
-                if st.button(h_sym.replace(".TW",""), key=f"hist_{h_sym}"):
+                h_code = h_sym.replace(".TW","").replace(".TWO","")
+                # 快速抓取簡短名稱顯示在歷史按鈕上
+                h_details = get_company_details(h_sym)
+                h_name = h_details["name"][:4] # 取前4個字避免按鈕太擠
+                btn_label = f"{h_code}\n{h_name}"
+                if st.button(btn_label, key=f"hist_{h_sym}", use_container_width=True):
                     select_symbol(h_sym)
                     st.rerun()
 
@@ -366,12 +386,12 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 
 # ================= 頁面二：熱門概念股專區 =================
 elif st.session_state.nav_page == "🏷️ 熱門概念股專區":
-    st.subheader("🏷️ 台股熱門產業概念專區")
-    st.caption("點選下方概念分類，即可即時檢視該板塊代表公司的行情與數據，並可直接點擊進入分析：")
+    st.subheader("🏷️ 台股熱門產業概念與基本面專區")
+    st.caption("點選板塊即可檢視該群組內所有代表公司的即時行情與基本面數據，點擊「深入分析」可直接切換檢視 K 線：")
 
     selected_theme = st.selectbox("選擇概念板塊", list(THEME_STOCKS.keys()))
 
-    st.markdown(f"### 📌 {selected_theme} 成分股即時行情")
+    st.markdown(f"### 📌 {selected_theme} 成分股總覽")
 
     theme_symbols = THEME_STOCKS[selected_theme]
 
@@ -387,22 +407,27 @@ elif st.session_state.nav_page == "🏷️ 熱門概念股專區":
                 sign = "+" if pct >= 0 else ""
                 color = "#10B981" if pct >= 0 else "#EF4444"
                 code = sym.replace(".TW", "")
+                
+                pe_val = f"{details['pe_ratio']:.1f}" if isinstance(details['pe_ratio'], (int, float)) else "N/A"
+                div_val = f"{details['dividend_yield']*100:.1f}%" if isinstance(details['dividend_yield'], (int, float)) and details['dividend_yield'] > 0 else "N/A"
 
-                col_info, col_btn = st.columns([2, 1])
+                col_info, col_btn = st.columns([2.5, 1])
                 with col_info:
                     st.markdown(f"""
                         <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
                             <span class="tag">股票</span>{code} {details['name']}
                         </div>
-                        <div style="font-size:13px; color:#CBD5E1; margin-top: 2px;">
-                            市價: <span style="color:#38BDF8; font-weight:bold;">${cp:.2f}</span> | 漲跌: <span style="color:{color}; font-weight:bold;">{sign}{pct:.2f}%</span>
+                        <div style="font-size:12px; color:#CBD5E1; margin-top: 3px;">
+                            市價: <span style="color:#38BDF8; font-weight:bold;">${cp:.2f}</span> | 漲跌: <span style="color:{color}; font-weight:bold;">{sign}{pct:.2f}%</span><br>
+                            本益比(PE): <b>{pe_val}</b> | 殖利率: <b>{div_val}</b> | 52週高低: <b>${details['high_52']} / ${details['low_52']}</b>
                         </div>
                     """, unsafe_allow_html=True)
                 with col_btn:
-                    if st.button("查看分析", key=f"theme_{sym}", use_container_width=True):
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("深入分析", key=f"theme_{sym}", use_container_width=True):
                         select_symbol(sym)
                         st.session_state.nav_page = "📈 即時行情與個股分析"
                         st.rerun()
-                st.markdown('<div style="border-bottom: 1px solid #334155; margin: 6px 0;"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
         except:
-            st.warning(f"無法取得 {sym} 的即時行情")
+            st.warning(f"無法取得 {sym} 的相關資訊")
