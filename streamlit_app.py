@@ -77,14 +77,11 @@ def fetch_realtime_hot_stocks():
         res = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(res.text, "html.parser")
         
-        # 尋找頁面中的股票代碼元素
         items = soup.find_all("div", class_="Box-MS(a) Pos(r)")
-        for item in items[:10]: # 取前 10 名
+        for item in items[:10]:
             txt = item.get_text()
-            # 萃取出 4 位數台股代碼
             for word in txt.split():
                 if word.isdigit() and len(word) == 4:
-                    # 判斷是上市(.TW)還是上櫃(.TWO)
                     sym = f"{word}.TW"
                     if sym not in hot_symbols:
                         hot_symbols.append(sym)
@@ -92,11 +89,9 @@ def fetch_realtime_hot_stocks():
     except Exception as e:
         print(f"爬取熱門股失敗: {e}")
     
-    # 萬一網路爬蟲失敗或非開盤時間抓不到，提供預設動態池作為備用
     if not hot_symbols:
         hot_symbols = ["2330.TW", "2317.TW", "2454.TW", "2382.TW", "2603.TW", "3231.TW", "2376.TW", "0050.TW", "00878.TW", "00919.TW"]
 
-    # 透過 yfinance 批次取得這些真正熱門股的即時數據
     data_list = []
     for sym in hot_symbols[:8]:
         try:
@@ -118,7 +113,6 @@ def fetch_realtime_hot_stocks():
         except:
             pass
             
-    # 根據成交量排序
     data_list = sorted(data_list, key=lambda x: x["volume"], reverse=True)
     return data_list
 
@@ -209,7 +203,7 @@ if symbol:
                 with c3:
                     st.markdown(f'<div class="trade-card sell-border"><div class="card-title">半年抄底</div><div class="card-val" style="color:#A855F7">${ma120_val}</div></div>', unsafe_allow_html=True)
             else:
-                buy_low = `round(max(ma60_val, ma20_val * 0.98), 2)` # 修正引號
+                buy_low = round(max(ma60_val, ma20_val * 0.98), 2)
                 buy_high = ma20_val
                 stop_loss = round(min(ma60_val * 0.97, latest["Lower"]), 2)
 
