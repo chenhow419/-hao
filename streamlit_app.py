@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# ----------------- 1. 頁面設定 & PWA 支援 -----------------
+# ----------------- 1. 頁面設定 & PWA / 美化 UI -----------------
 st.set_page_config(
     page_title="股票與 ETF 買點分析儀 Pro",
     page_icon="📈",
@@ -24,38 +24,11 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    .buy-card {
-        background-color: #1E293B;
-        border: 2px solid #10B981;
-        border-radius: 12px;
-        padding: 12px;
-        text-align: center;
-        margin-bottom: 10px;
-    }
-    .sell-card {
-        background-color: #1E293B;
-        border: 2px solid #EF4444;
-        border-radius: 12px;
-        padding: 12px;
-        text-align: center;
-        margin-bottom: 10px;
-    }
-    .stop-card {
-        background-color: #1E293B;
-        border: 2px solid #F59E0B;
-        border-radius: 12px;
-        padding: 12px;
-        text-align: center;
-        margin-bottom: 10px;
-    }
-    .etf-card {
-        background-color: #1E293B;
-        border: 2px solid #38BDF8;
-        border-radius: 12px;
-        padding: 12px;
-        text-align: center;
-        margin-bottom: 10px;
-    }
+    /* 買賣點卡片 */
+    .buy-card { background-color: #1E293B; border: 2px solid #10B981; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 10px; }
+    .sell-card { background-color: #1E293B; border: 2px solid #EF4444; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 10px; }
+    .stop-card { background-color: #1E293B; border: 2px solid #F59E0B; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 10px; }
+    .etf-card { background-color: #1E293B; border: 2px solid #38BDF8; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 10px; }
     .card-title { font-size: 13px; color: #94A3B8; margin-bottom: 4px; }
     .card-val-green { font-size: 20px; font-weight: bold; color: #10B981; }
     .card-val-red { font-size: 20px; font-weight: bold; color: #EF4444; }
@@ -70,6 +43,27 @@ st.markdown("""
         font-size: 13px;
         margin-right: 6px;
         display: inline-block;
+    }
+
+    /* 清單標題列與表頭 */
+    .list-header {
+        display: flex;
+        justify-content: space-between;
+        color: #94A3B8;
+        font-size: 13px;
+        padding: 6px 12px;
+        border-bottom: 1px solid #334155;
+        margin-bottom: 8px;
+    }
+    .rank-num-top { font-weight: bold; color: #F97316; font-size: 16px; }
+    .rank-num { font-weight: bold; color: #64748B; font-size: 16px; }
+    .stock-tag {
+        background-color: #334155;
+        color: #94A3B8;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-right: 4px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -94,8 +88,12 @@ STOCK_DICT = {
     "台積電": "2330.TW", "鴻海": "2317.TW", "聯發科": "2454.TW", "廣達": "2382.TW",
     "緯創": "3231.TW", "技嘉": "2376.TW", "華城": "1519.TW", "奇鋐": "3017.TW",
     "萬潤": "6187.TWO", "弘塑": "3131.TWO", "聯亞": "3081.TWO", "光聖": "6442.TW",
-    "國統": "8936.TWO", "世芯": "3661.TW", "緯穎": "6669.TW", "英業達": "2356.TW",
-    "辛耘": "3583.TW", "華星光": "4979.TWO", "上銓": "3363.TWO",
+    "世芯": "3661.TW", "緯穎": "6669.TW", "英業達": "2356.TW", "辛耘": "3583.TW",
+    "華星光": "4979.TWO", "上銓": "3363.TWO",
+    # 記憶體族群
+    "南亞科": "2408.TW", "華邦電": "2344.TW", "旺宏": "2337.TW", 
+    "威剛": "3260.TWO", "群聯": "8299.TWO", "晶豪科": "3006.TW",
+    # ETF
     "元大台灣50": "0050.TW", "0050": "0050.TW", "元大高股息": "0056.TW", "0056": "0056.TW",
     "國泰永續高股息": "00878.TW", "00878": "00878.TW", "群益台灣精選高息": "00919.TW", "00919": "00919.TW",
     "復華台灣科技優息": "00929.TW", "00929": "00929.TW", "富邦台50": "006208.TW", "006208": "006208.TW"
@@ -144,13 +142,18 @@ for i, (name, (val, pct)) in enumerate(market_data.items()):
 
 st.divider()
 
-# ----------------- 🎯 監控市場熱門庫（動態計算成交量與漲幅） -----------------
+# ----------------- 🎯 監控市場熱門庫（含記憶體族群） -----------------
 MONITOR_POOL = [
     ("台積電", "2330.TW"), ("鴻海", "2317.TW"), ("聯發科", "2454.TW"), ("廣達", "2382.TW"),
     ("緯創", "3231.TW"), ("技嘉", "2376.TW"), ("英業達", "2356.TW"), ("華城", "1519.TW"),
     ("奇鋐", "3017.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW"),
     ("聯亞", "3081.TWO"), ("華星光", "4979.TWO"), ("光聖", "6442.TW"), ("世芯-KY", "3661.TW"),
-    ("緯穎", "6669.TW"), ("0050", "0050.TW"), ("0056", "0056.TW"), ("00878", "00878.TW"),
+    ("緯穎", "6669.TW"),
+    # 🔹 記憶體族群
+    ("南亞科", "2408.TW"), ("華邦電", "2344.TW"), ("旺宏", "2337.TW"),
+    ("威剛", "3260.TWO"), ("群聯", "8299.TWO"), ("晶豪科", "3006.TW"),
+    # ETF
+    ("0050", "0050.TW"), ("0056", "0056.TW"), ("00878", "00878.TW"),
     ("00919", "00919.TW"), ("00929", "00929.TW"), ("006208", "006208.TW")
 ]
 
@@ -158,14 +161,14 @@ MONITOR_POOL = [
 STATIC_THEMES = {
     "🚀 AI 伺服器": [("廣達", "2382.TW"), ("緯創", "3231.TW"), ("技嘉", "2376.TW"), ("英業達", "2356.TW"), ("緯穎", "6669.TW")],
     "⚡ CoWoS 封裝": [("台積電", "2330.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW")],
+    "💾 記憶體族群": [("群聯", "8299.TWO"), ("威剛", "3260.TWO"), ("南亞科", "2408.TW"), ("華邦電", "2344.TW"), ("旺宏", "2337.TW")],
     "💡 矽光子 (CPO)": [("聯亞", "3081.TWO"), ("華星光", "4979.TWO"), ("光聖", "6442.TW"), ("上銓", "3363.TWO")],
     "📊 高股息 ETF": [("元大高股息", "0056.TW"), ("國泰00878", "00878.TW"), ("復華00929", "00929.TW"), ("群益00919", "00919.TW")],
-    "🌐 市值型 ETF": [("元大台灣50", "0050.TW"), ("富邦006208", "006208.TW"), ("費半00830", "00830.TW"), ("S&P00646", "00646.TW")]
+    "🌐 市值型 ETF": [("元大台灣50", "0050.TW"), ("富邦006208", "006208.TW")]
 }
 
 @st.cache_data(ttl=120)
 def fetch_stock_market_status():
-    """批次抓取市場行情與成交量數據"""
     results = {}
     for name, sym in MONITOR_POOL:
         try:
@@ -186,12 +189,12 @@ def fetch_stock_market_status():
 
 market_status = fetch_stock_market_status()
 
-# ----------------- 🎯 今日動態熱門標的 -----------------
+# ----------------- 🎯 今日即時熱門榜 (卡片式清單 UI) -----------------
 st.subheader("🔥 今日市場即時焦點 & 熱門題材")
 
 theme_options = ["🔥 成交量 Top 5", "🚀 漲幅榜 Top 5"] + list(STATIC_THEMES.keys())
 
-# 按鈕導航列
+# 按鈕導航頁籤
 t_cols = st.columns(len(theme_options))
 for idx, t_name in enumerate(theme_options):
     with t_cols[idx]:
@@ -202,22 +205,19 @@ for idx, t_name in enumerate(theme_options):
             type="primary" if st.session_state.selected_theme == t_name else "secondary"
         )
 
-# 動態計算與篩選列表
-display_stocks = []
+# 篩選資料
 selected_mode = st.session_state.selected_theme
+display_stocks = []
 
 if selected_mode == "🔥 成交量 Top 5":
-    # 依成交量排序取 Top 5
     sorted_by_vol = sorted(market_status.values(), key=lambda x: x["volume"], reverse=True)
     display_stocks = [(x["name"], x["symbol"], x["price"], x["pct"]) for x in sorted_by_vol[:5]]
 
 elif selected_mode == "🚀 漲幅榜 Top 5":
-    # 依漲幅排序取 Top 5
     sorted_by_pct = sorted(market_status.values(), key=lambda x: x["pct"], reverse=True)
     display_stocks = [(x["name"], x["symbol"], x["price"], x["pct"]) for x in sorted_by_pct[:5]]
 
 else:
-    # 熱門概念股/ETF 模式 (按當天漲幅排序)
     raw_list = STATIC_THEMES[selected_mode]
     temp_list = []
     for name, sym in raw_list:
@@ -226,24 +226,52 @@ else:
             temp_list.append((info["name"], info["symbol"], info["price"], info["pct"]))
         else:
             temp_list.append((name, sym, "N/A", 0))
-    # 漲幅高者排前面
     display_stocks = sorted(temp_list, key=lambda x: x[3] if isinstance(x[3], (int, float)) else -999, reverse=True)
 
-# 顯示選中的標的按鈕
-st.markdown(f"**📌【{selected_mode}】即時行情標的：**")
-if display_stocks:
-    s_cols = st.columns(min(len(display_stocks), 5))
-    for idx, (name, sym, p, pct) in enumerate(display_stocks[:5]):
-        col = s_cols[idx % 5]
-        sign = "+" if isinstance(pct, (int, float)) and pct >= 0 else ""
-        btn_label = f"{name}\n${p} ({sign}{pct}%)"
-        with col:
-            st.button(
-                btn_label, 
-                on_click=select_symbol, args=(sym,),
-                use_container_width=True, 
-                key=f"dyn_btn_{sym}_{idx}"
-            )
+# ----------------- 📱 仿 App 清單式渲染 -----------------
+st.markdown(f"**📌【{selected_mode}】即時行情列表：**")
+
+# 表頭
+h_c1, h_c2, h_c3, h_c4 = st.columns([1, 4, 3, 3])
+with h_c1: st.caption("名次")
+with h_c2: st.caption("股票 / 代碼")
+with h_c3: st.caption("收盤價")
+with h_c4: st.caption("漲跌幅")
+
+# 逐列繪製清單卡片
+for idx, (name, sym, price, pct) in enumerate(display_stocks[:5]):
+    rank_str = str(idx + 1)
+    rank_class = "rank-num-top" if idx < 3 else "rank-num"
+    
+    # 漲跌顏色判斷
+    if isinstance(pct, (int, float)):
+        sign = "+" if pct >= 0 else ""
+        color_style = "color: #10B981;" if pct >= 0 else "color: #EF4444;"
+        pct_str = f"{sign}{pct}%"
+    else:
+        color_style = "color: #94A3B8;"
+        pct_str = "N/A"
+
+    code_clean = sym.replace(".TW", "").replace(".TWO", "")
+    type_tag = "ETF" if code_clean.startswith("00") else "股票"
+
+    # 用按鈕包裹整行，點擊即可切換
+    c1, c2, c3, c4 = st.columns([1, 4, 3, 3])
+    with c1:
+        st.markdown(f'<div class="{rank_class}" style="padding-top: 8px;">{rank_str}</div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'**{name}**<br><span class="stock-tag">{type_tag}</span><span style="color:#94A3B8; font-size:12px;">{code_clean}</span>', unsafe_allow_html=True)
+    with c3:
+        st.markdown(f'<div style="font-weight: bold; font-size: 16px; padding-top: 8px;">${price}</div>', unsafe_allow_html=True)
+    with c4:
+        # 切換按鈕包含漲跌幅
+        st.button(
+            f"{pct_str} ➔", 
+            on_click=select_symbol, args=(sym,), 
+            key=f"row_btn_{sym}_{idx}",
+            use_container_width=True
+        )
+    st.markdown('<div style="border-bottom: 1px solid #1E293B; margin: 4px 0 8px 0;"></div>', unsafe_allow_html=True)
 
 st.divider()
 
