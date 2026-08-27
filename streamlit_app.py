@@ -30,14 +30,6 @@ st.markdown("""
     .buy-title { font-size: 14px; color: #94A3B8; margin-bottom: 5px; }
     .buy-price { font-size: 22px; font-weight: bold; color: #10B981; }
     .sell-price { font-size: 22px; font-weight: bold; color: #EF4444; }
-    
-    .topic-card {
-        background-color: #0F172A;
-        border: 1px solid #38BDF8;
-        border-radius: 8px;
-        padding: 10px;
-        margin-bottom: 10px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -76,19 +68,62 @@ for i, (name, (val, pct)) in enumerate(market_data.items()):
 
 st.divider()
 
-# ----------------- 🎯 熱門題材與概念股點擊 -----------------
-st.subheader("🔥 今日熱門題材 & 概念股")
+# ----------------- 🎯 新增：強勢/漲停焦點股速覽 -----------------
+st.subheader("🚨 今日強勢/接近漲停股")
 
-# 定義題材及其相關概念股
+@st.cache_data(ttl=120)
+def get_limit_up_stocks():
+    # 監控熱門指標股票，即時運算漲幅接近 9.5%~10% 的股票
+    watch_list = [
+        ("台積電", "2330.TW"), ("鴻海", "2317.TW"), ("廣達", "2382.TW"),
+        ("華城", "1519.TW"), ("奇鋐", "3017.TW"), ("萬潤", "6187.TWO"),
+        ("弘塑", "3131.TWO"), ("聯亞", "3081.TWO"), ("光聖", "6442.TW"),
+        ("國統", "8936.TWO"), ("世芯-KY", "3661.TW"), ("緯穎", "6669.TW")
+    ]
+    strong_stocks = []
+    for name, sym in watch_list:
+        try:
+            df_s = yf.Ticker(sym).history(period="2d")
+            if len(df_s) >= 2:
+                cp = df_s["Close"].iloc[-1]
+                pp = df_s["Close"].iloc[-2]
+                pct = ((cp - pp) / pp) * 100
+                # 篩選當日漲幅高於 5% 的強勢/漲停股
+                if pct >= 5.0:
+                    strong_stocks.append((name, sym, round(cp, 1), round(pct, 2)))
+        except:
+            pass
+    return strong_stocks
+
+strong_list = get_limit_up_stocks()
+
+if strong_list:
+    limit_cols = st.columns(min(len(strong_list), 4))
+    for idx, (name, sym, p, pct) in enumerate(strong_list[:4]):
+        with limit_cols[idx % 4]:
+            st.button(
+                f"🔥 {name}\n${p} (+{pct}%)", 
+                on_click=lambda s=sym: st.session_state.update({"selected_symbol": s}),
+                use_container_width=True,
+                key=f"limit_{sym}"
+            )
+else:
+    st.info("💡 目前盤中監控無觸及漲停之大型熱門股，或市場處於盤整狀態。")
+
+st.divider()
+
+# ----------------- 🎯 熱門題材與 ETF 分類 -----------------
+st.subheader("🔥 今日熱門題材 & 熱門 ETF")
+
+# 整合概念股與熱門 ETF 清單
 theme_stocks = {
     "🚀 AI 伺服器": [("廣達", "2382.TW"), ("緯創", "3231.TW"), ("技嘉", "2376.TW"), ("英業達", "2356.TW")],
     "⚡ CoWoS 先進封裝": [("台積電", "2330.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW")],
     "💡 矽光子 (CPO)": [("聯亞", "3081.TWO"), ("華星光", "4979.TWO"), ("光聖", "6442.TW"), ("上銓", "3363.TWO")],
-    "🔌 重電綠能": [("華城", "1519.TW"), ("士電", "1503.TW"), ("中興電", "1513.TW"), ("亞力", "1514.TW")],
-    "💧 水資源概念": [("國統", "8936.TWO"), ("山林水", "8473.TW"), ("中宇", "1535.TW"), ("幸福", "1108.TW")]
+    "📊 高股息 ETF": [("元大高股息", "0056.TW"), ("國泰永續高股息", "00878.TW"), ("復華台灣科技優息", "00929.TW"), ("群益台灣精選高息", "00919.TW")],
+    "🌐 市值型/美股 ETF": [("元大台灣50", "0050.TW"), ("富邦台50", "006208.TW"), ("國泰費城半導體", "00830.TW"), ("元大S&P500", "00646.TW")]
 }
 
-# Session State 控制當前選擇的題材與股票
 if "selected_theme" not in st.session_state:
     st.session_state.selected_theme = "🚀 AI 伺服器"
 if "selected_symbol" not in st.session_state:
@@ -112,7 +147,7 @@ for idx, t_name in enumerate(theme_stocks.keys()):
             type="primary" if st.session_state.selected_theme == t_name else "secondary"
         )
 
-# 2. 抓取當前題材概念股的即時價格
+# 2. 抓取當前分類標的價格
 @st.cache_data(ttl=60)
 def get_theme_prices(stock_list):
     prices = {}
@@ -123,7 +158,7 @@ def get_theme_prices(stock_list):
                 cp = df_s["Close"].iloc[-1]
                 pp = df_s["Close"].iloc[-2]
                 pct = ((cp - pp) / pp) * 100
-                prices[sym] = (round(cp, 1), round(pct, 2))
+                prices[sym] = (round(cp, 2), round(pct, 2))
             else:
                 prices[sym] = ("N/A", 0)
         except:
@@ -133,8 +168,8 @@ def get_theme_prices(stock_list):
 current_stocks = theme_stocks[st.session_state.selected_theme]
 stock_prices = get_theme_prices(current_stocks)
 
-# 3. 顯示相關概念股按鈕
-st.markdown(f"**📌【{st.session_state.selected_theme}】相關概念股（點擊直接分析）：**")
+# 3. 顯示相關概念股/ETF 按鈕
+st.markdown(f"**📌【{st.session_state.selected_theme}】標的（點擊直接分析）：**")
 s_cols = st.columns(len(current_stocks))
 
 for idx, (name, sym) in enumerate(current_stocks):
@@ -154,10 +189,10 @@ for idx, (name, sym) in enumerate(current_stocks):
 
 st.divider()
 
-# ----------------- 🎯 個股買點分析 -----------------
-st.subheader("🔍 個股合理買點分析")
+# ----------------- 🎯 個股/ETF 買點分析 -----------------
+st.subheader("🔍 個股與 ETF 合理買點分析")
 
-symbol = st.text_input("輸入股票代碼：", value=st.session_state.selected_symbol).upper().strip()
+symbol = st.text_input("輸入股票/ETF代碼：", value=st.session_state.selected_symbol).upper().strip()
 
 if st.button("🚀 開始計算與繪製 K 線圖", use_container_width=True) or symbol:
     with st.spinner("載入數據中..."):
