@@ -312,7 +312,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
     user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 1314, 0050)", value=st.session_state.selected_symbol)
     symbol = resolve_symbol(user_input)
 
-    # 加入或移出自選快捷按鈕
     col_w1, col_w2 = st.columns(2)
     with col_w1:
         if symbol not in st.session_state.watchlist:
@@ -466,6 +465,8 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
         theme_symbols = THEME_STOCKS[current_theme]["stocks"]
 
         for sym in theme_symbols:
+            fetch_success = False
+            # 讓 try-except 只包覆資料抓取，不包含 UI 按鈕與 rerun
             try:
                 t = yf.Ticker(sym)
                 hist = t.history(period="2d")
@@ -474,35 +475,40 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                     cp = hist["Close"].iloc[-1]
                     pp = hist["Close"].iloc[-2]
                     pct = ((cp - pp) / pp) * 100
-                    sign = "+" if pct >= 0 else ""
-                    color = "#10B981" if pct >= 0 else "#EF4444"
-                    code = sym.replace(".TW", "").replace(".TWO", "")
-                    
-                    custom_tag = "71%存股族加入自選" if code.startswith("00") else ("EPS>3 優質股" if cp > 100 else "高殖利率關注")
-
-                    col_info, col_btn = st.columns([2.5, 1])
-                    with col_info:
-                        st.markdown(f"""
-                            <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                                {code} {details['name']}
-                            </div>
-                            <div style="font-size:14px; margin-top:2px;">
-                                <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
-                                <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
-                            </div>
-                            <div style="font-size:11px; color:#94A3B8; margin-top:3px;">
-                                <span class="tag">{custom_tag}</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    with col_btn:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("詳細分析", key=f"theme_{sym}", use_container_width=True):
-                            select_symbol(sym)
-                            st.session_state.nav_page = "📈 即時行情與個股分析"
-                            st.session_state.selected_theme = None
-                            st.rerun()
-                    st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
+                    fetch_success = True
             except:
+                fetch_success = False
+
+            if fetch_success:
+                sign = "+" if pct >= 0 else ""
+                color = "#10B981" if pct >= 0 else "#EF4444"
+                code = sym.replace(".TW", "").replace(".TWO", "")
+                
+                custom_tag = "71%存股族加入自選" if code.startswith("00") else ("EPS>3 優質股" if cp > 100 else "高殖利率關注")
+
+                col_info, col_btn = st.columns([2.5, 1])
+                with col_info:
+                    st.markdown(f"""
+                        <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
+                            {code} {details['name']}
+                        </div>
+                        <div style="font-size:14px; margin-top:2px;">
+                            <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
+                            <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
+                        </div>
+                        <div style="font-size:11px; color:#94A3B8; margin-top:3px;">
+                            <span class="tag">{custom_tag}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with col_btn:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("詳細分析", key=f"theme_{sym}", use_container_width=True):
+                        select_symbol(sym)
+                        st.session_state.nav_page = "📈 即時行情與個股分析"
+                        st.session_state.selected_theme = None
+                        st.rerun()
+                st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
+            else:
                 st.warning(f"無法取得 {sym} 的相關資訊")
 
 
@@ -511,7 +517,6 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
     st.subheader("⭐ 我的自選股清單")
     st.caption("追蹤您專屬的自選標的，即時掌握最新價格與漲跌幅：")
 
-    # 快速新增自選股
     col_add_input, col_add_btn = st.columns([3, 1])
     with col_add_input:
         new_watch_input = st.text_input("輸入代碼新增自選", placeholder="例如: 2317 或 00878", label_visibility="collapsed")
@@ -532,6 +537,7 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
         st.info("目前尚無自選股，請透過上方輸入框新增，或從個股分析頁面加入！")
     else:
         for sym in list(st.session_state.watchlist):
+            fetch_success = False
             try:
                 t = yf.Ticker(sym)
                 hist = t.history(period="2d")
@@ -540,33 +546,38 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
                     cp = hist["Close"].iloc[-1]
                     pp = hist["Close"].iloc[-2]
                     pct = ((cp - pp) / pp) * 100
-                    sign = "+" if pct >= 0 else ""
-                    color = "#10B981" if pct >= 0 else "#EF4444"
-                    code = sym.replace(".TW", "").replace(".TWO", "")
-                    tag_type = "ETF" if code.startswith("00") else "股票"
-                    
-                    col_info, col_btn1, col_btn2 = st.columns([2.2, 1, 1])
-                    with col_info:
-                        st.markdown(f"""
-                            <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                                <span class="tag">{tag_type}</span>{code} {details['name']}
-                            </div>
-                            <div style="font-size:14px; margin-top:2px;">
-                                <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
-                                <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    with col_btn1:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("詳細分析", key=f"watch_goto_{sym}", use_container_width=True):
-                            select_symbol(sym)
-                            st.session_state.nav_page = "📈 即時行情與個股分析"
-                            st.rerun()
-                    with col_btn2:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("刪除", key=f"watch_del_{sym}", use_container_width=True):
-                            st.session_state.watchlist.remove(sym)
-                            st.rerun()
-                    st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
+                    fetch_success = True
             except:
+                fetch_success = False
+
+            if fetch_success:
+                sign = "+" if pct >= 0 else ""
+                color = "#10B981" if pct >= 0 else "#EF4444"
+                code = sym.replace(".TW", "").replace(".TWO", "")
+                tag_type = "ETF" if code.startswith("00") else "股票"
+                
+                col_info, col_btn1, col_btn2 = st.columns([2.2, 1, 1])
+                with col_info:
+                    st.markdown(f"""
+                        <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
+                            <span class="tag">{tag_type}</span>{code} {details['name']}
+                        </div>
+                        <div style="font-size:14px; margin-top:2px;">
+                            <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
+                            <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with col_btn1:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("詳細分析", key=f"watch_goto_{sym}", use_container_width=True):
+                        select_symbol(sym)
+                        st.session_state.nav_page = "📈 即時行情與個股分析"
+                        st.rerun()
+                with col_btn2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("刪除", key=f"watch_del_{sym}", use_container_width=True):
+                        st.session_state.watchlist.remove(sym)
+                        st.rerun()
+                st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
+            else:
                 st.warning(f"無法取得 {sym} 的相關資訊")
