@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# ----------------- 1. 頁面設定 & 強制深色主題 CSS -----------------
+# ----------------- 1. 頁面設定 & 強制深色主題與按鈕樣式 CSS -----------------
 st.set_page_config(
     page_title="股市 Pro",
     page_icon="📈",
@@ -16,10 +16,7 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* 強制設定全域深色背景與亮色文字 */
-    .stApp {
-        background-color: #0F172A !important;
-    }
+    .stApp { background-color: #0F172A !important; }
     #MainMenu, footer, header {visibility: hidden;}
     .block-container {
         padding-top: 1rem !important;
@@ -30,7 +27,20 @@ st.markdown("""
     
     body, p, span, div, label { color: #F8FAFC !important; }
     
-    /* 卡片與基本面區塊樣式 */
+    /* 強制修正 Streamlit 按鈕看不見文字的問題 */
+    div.stButton > button {
+        background-color: #334155 !important;
+        color: #F8FAFC !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+    }
+    div.stButton > button:hover {
+        background-color: #475569 !important;
+        color: #FFFFFF !important;
+        border-color: #64748B !important;
+    }
+
     .trade-card {
         background-color: #1E293B;
         border-radius: 10px;
@@ -82,6 +92,15 @@ def resolve_symbol(user_input):
         return f"{clean}.TW"
     return clean
 
+# 常用台股中文對照字典（解決英文名稱問題）
+TW_STOCK_NAMES = {
+    "2330.TW": "台積電", "2317.TW": "鴻海", "2454.TW": "聯發科", "2382.TW": "廣達",
+    "3231.TW": "緯創", "2376.TW": "技嘉", "2603.TW": "長榮", "2609.TW": "陽明",
+    "2615.TW": "萬海", "3037.TW": "欣興", "2408.TW": "南亞科", "2344.TW": "華邦電",
+    "0050.TW": "元大台灣50", "0056.TW": "元大高股息", "00878.TW": "國泰永續高股息",
+    "00919.TW": "群益台灣精選高息", "00929.TW": "復華台灣科技優息", "006208.TW": "富邦台50"
+}
+
 # ----------------- 2. 抓取台股大盤指數 -----------------
 @st.cache_data(ttl=60)
 def fetch_market_indices():
@@ -108,13 +127,16 @@ def fetch_market_indices():
             pass
     return data
 
-# ----------------- 3. 取得公司詳細基本面與名稱 -----------------
+# ----------------- 3. 取得公司詳細基本面（強制支援中文） -----------------
 @st.cache_data(ttl=3600)
 def get_company_details(symbol):
+    # 優先使用內建中文名稱
+    name = TW_STOCK_NAMES.get(symbol, symbol)
     try:
         t = yf.Ticker(symbol)
         info = t.info
-        name = info.get("longName") or info.get("shortName") or symbol
+        if name == symbol:  # 如果字典沒有，才嘗試抓取
+            name = info.get("longName") or info.get("shortName") or symbol
         return {
             "name": name,
             "sector": info.get("sector", "未提供"),
@@ -128,12 +150,12 @@ def get_company_details(symbol):
         }
     except:
         return {
-            "name": symbol, "sector": "未提供", "industry": "未提供", 
+            "name": name, "sector": "未提供", "industry": "未提供", 
             "summary": "暫無公司簡介資料。", "market_cap": 0, 
             "pe_ratio": "N/A", "dividend_yield": 0, "high_52": "N/A", "low_52": "N/A"
         }
 
-# ----------------- 4. 動態爬取熱門股並結合公司名稱 -----------------
+# ----------------- 4. 動態爬取熱門股 -----------------
 @st.cache_data(ttl=300)
 def fetch_realtime_hot_stocks():
     hot_symbols = []
@@ -170,14 +192,12 @@ def fetch_realtime_hot_stocks():
                 pct = ((cp - pp) / pp) * 100
                 code = sym.replace(".TW", "").replace(".TWO", "")
                 
-                # 取得公司名稱
                 details = get_company_details(sym)
-                full_name = details["name"]
                 
                 data_list.append({
                     "symbol": sym,
                     "code": code,
-                    "name": full_name,
+                    "name": details["name"],
                     "price": round(cp, 2),
                     "pct": round(pct, 2),
                     "volume": vol
@@ -273,7 +293,6 @@ if symbol:
         else:
             is_etf = symbol.startswith("00") or "ETF" in symbol.upper()
 
-            # 顯示公司基本面資訊卡片
             market_cap_val = details['market_cap']
             market_cap_str = f"{market_cap_val / 1e8:,.1f} 億" if market_cap_val and market_cap_val > 0 else "N/A"
             div_yield = details['dividend_yield']
