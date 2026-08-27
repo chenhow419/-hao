@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# ----------------- 1. 頁面設定 & 手機 App UI 樣式優化 -----------------
+# ----------------- 1. 頁面設定 & 強制深色主題 CSS -----------------
 st.set_page_config(
     page_title="股市 Pro",
     page_icon="📈",
@@ -16,6 +16,10 @@ st.set_page_config(
 
 st.markdown("""
     <style>
+    /* 強制設定全域深色背景，解決白底白字看不見的問題 */
+    .stApp {
+        background-color: #0F172A !important;
+    }
     #MainMenu, footer, header {visibility: hidden;}
     .block-container {
         padding-top: 1rem !important;
@@ -23,7 +27,11 @@ st.markdown("""
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
     }
-    body, p, span, div { color: #F8FAFC !important; }
+    
+    /* 強制所有文字呈現亮色 */
+    body, p, span, div, label { color: #F8FAFC !important; }
+    
+    /* 卡片樣式 */
     .trade-card {
         background-color: #1E293B;
         border-radius: 10px;
@@ -35,8 +43,10 @@ st.markdown("""
     .sell-border { border: 1.5px solid #EF4444; }
     .stop-border { border: 1.5px solid #F59E0B; }
     .etf-border { border: 1.5px solid #38BDF8; }
+    
     .card-title { font-size: 11px; color: #94A3B8 !important; margin-bottom: 2px; }
     .card-val { font-size: 16px; font-weight: bold; }
+    
     .tag {
         background-color: #334155;
         color: #F8FAFC !important;
@@ -66,10 +76,35 @@ def resolve_symbol(user_input):
         return f"{clean}.TW"
     return clean
 
-# ----------------- 2. 真正動態爬取 Yahoo 股市即時熱門成交量排行 -----------------
+# ----------------- 2. 抓取台股大盤指數 -----------------
+@st.cache_data(ttl=60)
+def fetch_market_indices():
+    indices = {
+        "台股加權指數": "^TWII",
+        "櫃買指數": "^TWOII"
+    }
+    data = {}
+    for name, symbol in indices.items():
+        try:
+            t = yf.Ticker(symbol)
+            hist = t.history(period="2d")
+            if len(hist) >= 2:
+                cp = hist["Close"].iloc[-1]
+                pp = hist["Close"].iloc[-2]
+                diff = cp - pp
+                pct = (diff / pp) * 100
+                data[name] = {
+                    "price": round(cp, 2),
+                    "diff": round(diff, 2),
+                    "pct": round(pct, 2)
+                }
+        except:
+            pass
+    return data
+
+# ----------------- 3. 動態爬取 Yahoo 股市即時熱門成交量排行 -----------------
 @st.cache_data(ttl=300)
 def fetch_realtime_hot_stocks():
-    """透過網路爬蟲自動抓取當前 Yahoo 股市成交量排行前幾名"""
     hot_symbols = []
     try:
         url = "https://tw.stock.yahoo.com/rank/volume"
@@ -116,11 +151,32 @@ def fetch_realtime_hot_stocks():
     data_list = sorted(data_list, key=lambda x: x["volume"], reverse=True)
     return data_list
 
-# ----------------- 3. 大盤行情與浮動熱門榜 -----------------
+# ----------------- 4. UI 介面呈現 -----------------
 st.title("📈 股市行情 Pro")
 
-raw_hot_data = fetch_realtime_hot_stocks()
+# 顯示大盤指數區塊
+st.subheader("📊 台灣三大指數行情")
+indices_data = fetch_market_indices()
+if indices_data:
+    idx_cols = st.columns(len(indices_data))
+    for i, (name, val) in enumerate(indices_data.items()):
+        color = "#10B981" if val['diff'] >= 0 else "#EF4444"
+        sign = "+" if val['diff'] >= 0 else ""
+        with idx_cols[i]:
+            st.markdown(f"""
+                <div class="trade-card" style="border-left: 4px solid {color}; text-align: left; padding: 12px;">
+                    <div class="card-title">{name}</div>
+                    <div style="font-size: 18px; font-weight: bold; margin: 4px 0;">{val['price']:,.2f}</div>
+                    <div style="font-size: 12px; color: {color}; font-weight: bold;">
+                        {sign}{val['diff']} ({sign}{val['pct']}%)
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
+st.divider()
+
+# 熱門排行清單
+raw_hot_data = fetch_realtime_hot_stocks()
 tab_choice = st.radio("熱門排行", ["🔥 即時成交量熱門榜", "🚀 今日漲幅最強榜"], horizontal=True, label_visibility="collapsed")
 
 if tab_choice == "🔥 即時成交量熱門榜":
@@ -156,7 +212,7 @@ for idx, item in enumerate(display_stocks):
 
 st.divider()
 
-# ----------------- 4. 個股與 ETF 個別分析 -----------------
+# ----------------- 5. 個股與 ETF 個別分析 -----------------
 st.subheader("🔍 個股 / ETF 買賣點與風控")
 
 user_input = st.text_input("輸入股票或 ETF 代碼 (如: 2330, 0050)", value=st.session_state.selected_symbol)
