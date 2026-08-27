@@ -31,26 +31,12 @@ st.markdown("""
     .buy-price { font-size: 22px; font-weight: bold; color: #10B981; }
     .sell-price { font-size: 22px; font-weight: bold; color: #EF4444; }
     
-    /* 修正熱門題材對比度 */
-    .topic-box {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border: 1px solid #38bdf8;
-        border-radius: 10px;
-        padding: 12px 16px;
-        margin-bottom: 15px;
-        color: #f8fafc;
-    }
-    .topic-title { color: #38bdf8; font-weight: bold; font-size: 16px; margin-bottom: 6px; }
-    .topic-content { color: #f1f5f9; font-size: 14px; line-height: 1.6; }
-    .tag {
-        background-color: #334155;
-        color: #fef08a;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 13px;
-        margin-right: 5px;
-        display: inline-block;
-        margin-top: 4px;
+    .topic-card {
+        background-color: #0F172A;
+        border: 1px solid #38BDF8;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -90,47 +76,47 @@ for i, (name, (val, pct)) in enumerate(market_data.items()):
 
 st.divider()
 
-# ----------------- 🎯 今日熱門題材 -----------------
-st.subheader("🔥 今日熱門題材焦點")
+# ----------------- 🎯 熱門題材與概念股點擊 -----------------
+st.subheader("🔥 今日熱門題材 & 概念股")
 
-st.markdown("""
-<div class="topic-box">
-    <div class="topic-title">🚀 資金聚焦主線</div>
-    <div class="topic-content">
-        <span class="tag">AI 伺服器</span>
-        <span class="tag">CoWoS 先進封裝</span>
-        <span class="tag">矽光子 (CPO)</span>
-        <span class="tag">重電綠能</span>
-        <span class="tag">水資源概念</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# 定義題材及其相關概念股
+theme_stocks = {
+    "🚀 AI 伺服器": [("廣達", "2382.TW"), ("緯創", "3231.TW"), ("技嘉", "2376.TW"), ("英業達", "2356.TW")],
+    "⚡ CoWoS 先進封裝": [("台積電", "2330.TW"), ("萬潤", "6187.TWO"), ("弘塑", "3131.TWO"), ("辛耘", "3583.TW")],
+    "💡 矽光子 (CPO)": [("聯亞", "3081.TWO"), ("華星光", "4979.TWO"), ("光聖", "6442.TW"), ("上銓", "3363.TWO")],
+    "🔌 重電綠能": [("華城", "1519.TW"), ("士電", "1503.TW"), ("中興電", "1513.TW"), ("亞力", "1514.TW")],
+    "💧 水資源概念": [("國統", "8936.TWO"), ("山林水", "8473.TW"), ("中宇", "1535.TW"), ("幸福", "1108.TW")]
+}
 
-# ----------------- 🎯 注意焦點股（含即時股價點擊） -----------------
-st.subheader("⚠️ 觀察警示/焦點股（點擊切換分析）")
-
-# Session State 管理
+# Session State 控制當前選擇的題材與股票
+if "selected_theme" not in st.session_state:
+    st.session_state.selected_theme = "🚀 AI 伺服器"
 if "selected_symbol" not in st.session_state:
-    st.session_state.selected_symbol = "2330.TW"
+    st.session_state.selected_symbol = "2382.TW"
+
+def change_theme(t_name):
+    st.session_state.selected_theme = t_name
 
 def select_stock(sym):
     st.session_state.selected_symbol = sym
 
-# 焦點股清單
-focus_stocks = [
-    ("台積電", "2330.TW"),
-    ("鴻海", "2317.TW"),
-    ("聯發科", "2454.TW"),
-    ("廣達", "2382.TW"),
-    ("緯創", "3231.TW"),
-    ("奇鋐", "3017.TW")
-]
+# 1. 顯示題材切換按鈕
+t_cols = st.columns(len(theme_stocks))
+for idx, t_name in enumerate(theme_stocks.keys()):
+    with t_cols[idx]:
+        st.button(
+            t_name, 
+            on_click=change_theme, 
+            args=(t_name,), 
+            use_container_width=True,
+            type="primary" if st.session_state.selected_theme == t_name else "secondary"
+        )
 
-# 批次抓取焦點股即時股價
+# 2. 抓取當前題材概念股的即時價格
 @st.cache_data(ttl=60)
-def get_focus_prices():
+def get_theme_prices(stock_list):
     prices = {}
-    for name, sym in focus_stocks:
+    for name, sym in stock_list:
         try:
             df_s = yf.Ticker(sym).history(period="2d")
             if len(df_s) >= 2:
@@ -144,18 +130,27 @@ def get_focus_prices():
             prices[sym] = ("N/A", 0)
     return prices
 
-focus_prices = get_focus_prices()
+current_stocks = theme_stocks[st.session_state.selected_theme]
+stock_prices = get_theme_prices(current_stocks)
 
-# 以 3 欄式按鈕呈現焦點股與即時股價
-f_cols = st.columns(3)
-for idx, (name, sym) in enumerate(focus_stocks):
-    col = f_cols[idx % 3]
-    p, pct = focus_prices.get(sym, ("N/A", 0))
+# 3. 顯示相關概念股按鈕
+st.markdown(f"**📌【{st.session_state.selected_theme}】相關概念股（點擊直接分析）：**")
+s_cols = st.columns(len(current_stocks))
+
+for idx, (name, sym) in enumerate(current_stocks):
+    col = s_cols[idx]
+    p, pct = stock_prices.get(sym, ("N/A", 0))
     sign = "+" if pct >= 0 else ""
-    btn_label = f"{name} ({sym.split('.')[0]})\n${p} ({sign}{pct}%)"
+    btn_label = f"{name}\n${p} ({sign}{pct}%)"
     
     with col:
-        st.button(btn_label, on_click=select_stock, args=(sym,), use_container_width=True, key=f"btn_{sym}")
+        st.button(
+            btn_label, 
+            on_click=select_stock, 
+            args=(sym,), 
+            use_container_width=True, 
+            key=f"stock_btn_{sym}"
+        )
 
 st.divider()
 
