@@ -177,7 +177,7 @@ THEME_STOCKS = {
     }
 }
 
-# ----------------- 2. 資料抓取函數 -----------------
+# ----------------- 2. 資料抓取函數 (全面加上快取防限流) -----------------
 @st.cache_data(ttl=60)
 def fetch_market_indices():
     indices = {"台股加權指數": "^TWII", "櫃買指數": "^TWOII"}
@@ -243,6 +243,51 @@ def fetch_realtime_hot_stocks():
         except:
             pass
     return sorted(data_list, key=lambda x: x["volume"], reverse=True)
+
+@st.cache_data(ttl=300)
+def fetch_theme_stocks_cached(theme_name):
+    theme_symbols = THEME_STOCKS[theme_name]["stocks"]
+    results = []
+    for sym in theme_symbols:
+        try:
+            t = yf.Ticker(sym)
+            hist = t.history(period="2d")
+            details = get_company_details(sym)
+            if len(hist) >= 2:
+                cp = hist["Close"].iloc[-1]
+                pp = hist["Close"].iloc[-2]
+                pct = ((cp - pp) / pp) * 100
+                results.append({
+                    "symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""),
+                    "name": details["name"], "price": round(cp, 2), "pct": round(pct, 2), "success": True
+                })
+            else:
+                results.append({"symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""), "name": TW_STOCK_NAMES.get(sym, sym), "price": 0, "pct": 0, "success": False})
+        except:
+            results.append({"symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""), "name": TW_STOCK_NAMES.get(sym, sym), "price": 0, "pct": 0, "success": False})
+    return results
+
+@st.cache_data(ttl=300)
+def fetch_watchlist_cached(symbols_tuple):
+    results = []
+    for sym in symbols_tuple:
+        try:
+            t = yf.Ticker(sym)
+            hist = t.history(period="2d")
+            details = get_company_details(sym)
+            if len(hist) >= 2:
+                cp = hist["Close"].iloc[-1]
+                pp = hist["Close"].iloc[-2]
+                pct = ((cp - pp) / pp) * 100
+                results.append({
+                    "symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""),
+                    "name": details["name"], "price": round(cp, 2), "pct": round(pct, 2), "success": True
+                })
+            else:
+                results.append({"symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""), "name": TW_STOCK_NAMES.get(sym, sym), "price": 0, "pct": 0, "success": False})
+        except:
+            results.append({"symbol": sym, "code": sym.replace(".TW", "").replace(".TWO", ""), "name": TW_STOCK_NAMES.get(sym, sym), "price": 0, "pct": 0, "success": False})
+    return results
 
 # ----------------- 3. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
@@ -462,27 +507,16 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
         st.markdown(f"<div style='font-size:12px; color:#94A3B8; margin-bottom:10px;'>{THEME_STOCKS[current_theme]['tag_desc']}</div>", unsafe_allow_html=True)
         st.markdown('<div style="border-bottom: 1px solid #334155; margin-bottom: 10px;"></div>', unsafe_allow_html=True)
 
-        theme_symbols = THEME_STOCKS[current_theme]["stocks"]
+        theme_results = fetch_theme_stocks_cached(current_theme)
 
-        for sym in theme_symbols:
-            fetch_success = False
-            # 讓 try-except 只包覆資料抓取，不包含 UI 按鈕與 rerun
-            try:
-                t = yf.Ticker(sym)
-                hist = t.history(period="2d")
-                details = get_company_details(sym)
-                if len(hist) >= 2:
-                    cp = hist["Close"].iloc[-1]
-                    pp = hist["Close"].iloc[-2]
-                    pct = ((cp - pp) / pp) * 100
-                    fetch_success = True
-            except:
-                fetch_success = False
-
-            if fetch_success:
+        for item in theme_results:
+            sym = item["symbol"]
+            if item["success"]:
+                cp = item["price"]
+                pct = item["pct"]
                 sign = "+" if pct >= 0 else ""
                 color = "#10B981" if pct >= 0 else "#EF4444"
-                code = sym.replace(".TW", "").replace(".TWO", "")
+                code = item["code"]
                 
                 custom_tag = "71%存股族加入自選" if code.startswith("00") else ("EPS>3 優質股" if cp > 100 else "高殖利率關注")
 
@@ -490,7 +524,7 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                 with col_info:
                     st.markdown(f"""
                         <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                            {code} {details['name']}
+                            {code} {item['name']}
                         </div>
                         <div style="font-size:14px; margin-top:2px;">
                             <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
@@ -509,7 +543,8 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                         st.rerun()
                 st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
             else:
-                st.warning(f"無法取得 {sym} 的相關資訊")
+                # 靜默略過或顯示精簡提示，不再跳出干擾警告框
+                pass
 
 
 # ================= 頁面三：我的自選股 =================
@@ -536,31 +571,24 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
     if not st.session_state.watchlist:
         st.info("目前尚無自選股，請透過上方輸入框新增，或從個股分析頁面加入！")
     else:
-        for sym in list(st.session_state.watchlist):
-            fetch_success = False
-            try:
-                t = yf.Ticker(sym)
-                hist = t.history(period="2d")
-                details = get_company_details(sym)
-                if len(hist) >= 2:
-                    cp = hist["Close"].iloc[-1]
-                    pp = hist["Close"].iloc[-2]
-                    pct = ((cp - pp) / pp) * 100
-                    fetch_success = True
-            except:
-                fetch_success = False
+        watchlist_tuple = tuple(st.session_state.watchlist)
+        watchlist_results = fetch_watchlist_cached(watchlist_tuple)
 
-            if fetch_success:
+        for item in watchlist_results:
+            sym = item["symbol"]
+            if item["success"]:
+                cp = item["price"]
+                pct = item["pct"]
                 sign = "+" if pct >= 0 else ""
                 color = "#10B981" if pct >= 0 else "#EF4444"
-                code = sym.replace(".TW", "").replace(".TWO", "")
+                code = item["code"]
                 tag_type = "ETF" if code.startswith("00") else "股票"
                 
                 col_info, col_btn1, col_btn2 = st.columns([2.2, 1, 1])
                 with col_info:
                     st.markdown(f"""
                         <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                            <span class="tag">{tag_type}</span>{code} {details['name']}
+                            <span class="tag">{tag_type}</span>{code} {item['name']}
                         </div>
                         <div style="font-size:14px; margin-top:2px;">
                             <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
@@ -580,4 +608,4 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
                         st.rerun()
                 st.markdown('<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>', unsafe_allow_html=True)
             else:
-                st.warning(f"無法取得 {sym} 的相關資訊")
+                pass
