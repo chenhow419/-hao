@@ -292,11 +292,14 @@ def fetch_watchlist_cached(symbols_tuple):
 # ----------------- 3. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
 
-# 關鍵修復：加入 key="nav_page"，讓 st.radio 與 session_state 正確同步狀態
-st.radio(
+# 安全的導航列寫法：利用 index 參數對應 st.session_state.nav_page，避免直接修改 key 引發例外
+pages = ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"]
+curr_index = pages.index(st.session_state.nav_page) if st.session_state.nav_page in pages else 0
+
+st.session_state.nav_page = st.radio(
     "功能頁籤",
-    ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"],
-    key="nav_page",
+    pages,
+    index=curr_index,
     horizontal=True,
     label_visibility="collapsed"
 )
