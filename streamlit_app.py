@@ -547,6 +547,15 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
       else:
         is_etf = symbol.startswith("00") or "ETF" in symbol.upper()
 
+        # 計算當天股價與漲跌幅
+        latest = df.iloc[-1]
+        prev_close = df["Close"].iloc[-2] if len(df) >= 2 else latest["Close"]
+        close_p = round(latest["Close"], 2)
+        price_diff = round(close_p - prev_close, 2)
+        price_pct = round((price_diff / prev_close) * 100, 2)
+        sign_str = "+" if price_diff >= 0 else ""
+        price_color = "#EF4444" if price_diff >= 0 else "#10B981"
+
         market_cap_val = details["market_cap"]
         market_cap_str = (
             f"{market_cap_val / 1e8:,.1f} 億"
@@ -568,8 +577,16 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
         st.markdown(
             f"""
                 <div class="info-box">
-                    <div style="font-size: 18px; font-weight: bold; color: #38BDF8; margin-bottom: 6px;">
-                        {details['name']} ({symbol})
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                        <div style="font-size: 18px; font-weight: bold; color: #38BDF8;">
+                            {details['name']} ({symbol})
+                        </div>
+                        <div>
+                            <span style="font-size: 18px; font-weight: bold; color: #FFFFFF;">${close_p:,.2f}</span>
+                            <span style="font-size: 13px; font-weight: bold; color: {price_color}; margin-left: 6px;">
+                                {sign_str}{price_diff} ({sign_str}{price_pct}%)
+                            </span>
+                        </div>
                     </div>
                     <div style="font-size: 13px; color: #94A3B8; margin-bottom: 10px;">
                         產業類別：{details['sector']} / {details['industry']}
@@ -595,8 +612,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
         df["Upper"] = df["MA20"] + (df["STD20"] * 2)
         df["Lower"] = df["MA20"] - (df["STD20"] * 2)
 
-        latest = df.iloc[-1]
-        close_p = round(latest["Close"], 2)
         ma20_val = round(latest["MA20"], 2)
         ma60_val = round(latest["MA60"], 2)
         ma120_val = (
@@ -630,7 +645,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
                 unsafe_allow_html=True,
             )
         else:
-          # 將買區改成區間範圍（例如：20MA的98% ~ 20MA）
           buy_low = round(ma20_val * 0.98, 2)
           buy_high_val = ma20_val
           stop_loss = round(min(ma60_val * 0.97, latest["Lower"]), 2)
