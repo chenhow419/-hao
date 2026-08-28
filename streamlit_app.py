@@ -116,83 +116,6 @@ if "nav_page" not in st.session_state:
 if "selected_theme" not in st.session_state:
   st.session_state.selected_theme = None
 
-if "theme_stocks" not in st.session_state:
-  st.session_state.theme_stocks = {
-      "🤖 AI 伺服器與散熱": {
-          "tag_desc": "AI 概念強勢供應鏈",
-          "external_url": "https://tw.stock.yahoo.com/class-quote?category=AI",
-          "stocks": [
-              "2382.TW",
-              "3231.TW",
-              "2376.TW",
-              "3017.TW",
-              "3653.TW",
-              "6669.TW",
-          ],
-      },
-      "⚡ 半導體重量權值": {
-          "tag_desc": "護國神山與高階晶片",
-          "external_url": (
-              "https://tw.stock.yahoo.com/class-quote?category=semiconductor"
-          ),
-          "stocks": [
-              "2330.TW",
-              "2454.TW",
-              "2303.TW",
-              "3661.TW",
-              "2379.TW",
-              "3034.TW",
-          ],
-      },
-      "💰 熱門高股息與市值ETF": {
-          "tag_desc": "存股族最愛配置",
-          "external_url": "https://tw.stock.yahoo.com/class-quote?category=etf",
-          "stocks": [
-              "0050.TW",
-              "0056.TW",
-              "00878.TW",
-              "00919.TW",
-              "00929.TW",
-              "00713.TW",
-          ],
-      },
-      "🚢 航運與散裝航運": {
-          "tag_desc": "景氣循環與高殖利率",
-          "external_url": (
-              "https://tw.stock.yahoo.com/class-quote?category=shipping"
-          ),
-          "stocks": ["2603.TW", "2609.TW", "2615.TW", "2606.TW"],
-      },
-      "🏦 金融與大型權值股": {
-          "tag_desc": "穩健收益金控首選",
-          "external_url": (
-              "https://tw.stock.yahoo.com/class-quote?category=financial"
-          ),
-          "stocks": ["2881.TW", "2882.TW", "5871.TW"],
-      },
-      "🔥 近期熱門焦點標的": {
-          "tag_desc": "市場高關注度熱股",
-          "external_url": "https://tw.stock.yahoo.com/trending/stocks",
-          "stocks": ["2330.TW", "2317.TW", "2327.TW", "0050.TW", "2454.TW"],
-      },
-  }
-
-
-def select_symbol(sym):
-  st.session_state.selected_symbol = sym
-  if sym in st.session_state.history:
-    st.session_state.history.remove(sym)
-  st.session_state.history.insert(0, sym)
-  st.session_state.history = st.session_state.history[:5]
-
-
-def resolve_symbol(user_input):
-  clean = user_input.strip().upper()
-  if clean.isdigit():
-    return f"{clean}.TW"
-  return clean
-
-
 TW_STOCK_NAMES = {
     "2330.TW": "台積電",
     "2317.TW": "鴻海",
@@ -222,7 +145,28 @@ TW_STOCK_NAMES = {
     "00713.TW": "元大台灣高息低波",
     "1314.TW": "中石化",
     "2327.TW": "國巨",
+    "3711.TW": "日月光投控",
+    "2412.TW": "中華電",
+    "1301.TW": "台塑",
+    "1303.TW": "南亞",
+    "2002.TW": "中鋼",
+    "2891.TW": "中信金",
 }
+
+
+def select_symbol(sym):
+  st.session_state.selected_symbol = sym
+  if sym in st.session_state.history:
+    st.session_state.history.remove(sym)
+  st.session_state.history.insert(0, sym)
+  st.session_state.history = st.session_state.history[:5]
+
+
+def resolve_symbol(user_input):
+  clean = user_input.strip().upper()
+  if clean.isdigit():
+    return f"{clean}.TW"
+  return clean
 
 
 # ----------------- 3. 資料抓取函數 -----------------
@@ -284,19 +228,10 @@ def get_company_details(symbol):
 
 
 @st.cache_data(ttl=300)
-def fetch_realtime_hot_stocks():
-  hot_symbols = [
-      "2330.TW",
-      "2317.TW",
-      "2454.TW",
-      "2382.TW",
-      "2603.TW",
-      "3231.TW",
-      "2376.TW",
-      "0050.TW",
-  ]
-  data_list = []
-  for sym in hot_symbols[:8]:
+def fetch_yahoo_style_ranking():
+  symbols = list(TW_STOCK_NAMES.keys())
+  ranking_data = []
+  for sym in symbols:
     try:
       t = yf.Ticker(sym)
       hist = t.history(period="2d")
@@ -305,64 +240,27 @@ def fetch_realtime_hot_stocks():
       if len(hist) >= 2:
         cp = hist["Close"].iloc[-1]
         pp = hist["Close"].iloc[-2]
+        high_p = hist["High"].iloc[-1]
+        low_p = hist["Low"].iloc[-1]
         vol = hist["Volume"].iloc[-1]
-        pct = ((cp - pp) / pp) * 100
+        diff = cp - pp
+        pct = (diff / pp) * 100
         code = sym.replace(".TW", "").replace(".TWO", "")
-        details = get_company_details(sym)
-        data_list.append({
+        name = TW_STOCK_NAMES.get(sym, code)
+        ranking_data.append({
             "symbol": sym,
             "code": code,
-            "name": details["name"],
+            "name": name,
             "price": round(cp, 2),
+            "diff": round(diff, 2),
             "pct": round(pct, 2),
+            "high": round(high_p, 2),
+            "low": round(low_p, 2),
             "volume": vol,
         })
     except:
       pass
-  return sorted(data_list, key=lambda x: x["volume"], reverse=True)
-
-
-def fetch_theme_stocks_dynamic(theme_name, theme_dict):
-  theme_symbols = theme_dict[theme_name]["stocks"]
-  results = []
-  for sym in theme_symbols:
-    try:
-      t = yf.Ticker(sym)
-      hist = t.history(period="2d")
-      if isinstance(hist.columns, pd.MultiIndex):
-        hist.columns = hist.columns.get_level_values(0)
-      details = get_company_details(sym)
-      if len(hist) >= 2:
-        cp = hist["Close"].iloc[-1]
-        pp = hist["Close"].iloc[-2]
-        pct = ((cp - pp) / pp) * 100
-        results.append({
-            "symbol": sym,
-            "code": sym.replace(".TW", "").replace(".TWO", ""),
-            "name": details["name"],
-            "price": round(cp, 2),
-            "pct": round(pct, 2),
-            "success": True,
-        })
-      else:
-        results.append({
-            "symbol": sym,
-            "code": sym.replace(".TW", "").replace(".TWO", ""),
-            "name": TW_STOCK_NAMES.get(sym, sym),
-            "price": 0,
-            "pct": 0,
-            "success": False,
-        })
-    except:
-      results.append({
-          "symbol": sym,
-          "code": sym.replace(".TW", "").replace(".TWO", ""),
-          "name": TW_STOCK_NAMES.get(sym, sym),
-          "price": 0,
-          "pct": 0,
-          "success": False,
-      })
-  return results
+  return ranking_data
 
 
 @st.cache_data(ttl=300)
@@ -411,7 +309,7 @@ def fetch_watchlist_cached(symbols_tuple):
 # ----------------- 4. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
 
-pages = ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"]
+pages = ["📈 即時行情與個股分析", "🏆 即時行情排行", "⭐ 我的自選股"]
 curr_index = (
     pages.index(st.session_state.nav_page)
     if st.session_state.nav_page in pages
@@ -453,23 +351,15 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 
   st.divider()
 
-  raw_hot_data = fetch_realtime_hot_stocks()
-  tab_choice = st.radio(
-      "熱門排行",
-      ["🔥 即時成交量熱門榜", "🚀 今日漲幅最強榜"],
-      horizontal=True,
-      label_visibility="collapsed",
-  )
-
-  display_stocks = sorted(
-      raw_hot_data,
-      key=lambda x: x["volume" if tab_choice.startswith("🔥") else "pct"],
-      reverse=True,
+  all_ranking_quick = fetch_yahoo_style_ranking()
+  top_gainers_quick = sorted(
+      all_ranking_quick, key=lambda x: x["pct"], reverse=True
   )[:5]
 
-  st.caption("📱 點擊下方即時熱門股，直接載入公司基本面與 K 線分析：")
+  st.subheader("🔥 即時漲幅最強榜")
+  st.caption("📱 點擊下方標的，直接載入公司基本面與 K 線分析：")
 
-  for idx, item in enumerate(display_stocks):
+  for idx, item in enumerate(top_gainers_quick):
     sign = "+" if item["pct"] >= 0 else ""
     color = "#EF4444" if item["pct"] >= 0 else "#10B981"
     tag_type = "ETF" if item["code"].startswith("00") else "股票"
@@ -549,7 +439,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
       ticker = yf.Ticker(symbol)
       df = ticker.history(period="1y")
 
-      # 修正：確保 yfinance 欄位結構為單層，避免 MultiIndex 導致 MA 欄位抓取失敗
       if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -781,172 +670,88 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
       st.error(f"資料取得失敗：{e}")
 
 
-# ================= 頁面二：排行選股專區 =================
-elif st.session_state.nav_page == "🏷️ 排行選股專區":
-  st.subheader("📊 智慧排行選股中心")
+# ================= 頁面二：即時行情排行 (Yahoo 風格) =================
+elif st.session_state.nav_page == "🏆 即時行情排行":
+  st.subheader("🏆 台股即時行情排行中心")
+  st.caption(
+      "模擬 Yahoo 股市介面，即時提供上市櫃熱門標的的漲幅、跌幅與成交量排行："
+  )
 
-  with st.expander("➕ 點擊展開：動態新增自訂概念股分類"):
-    with st.form("add_theme_form"):
-      new_t_name = st.text_input("分類名稱 (例如: 🚗 電動車概念股)")
-      new_t_desc = st.text_input("分類簡介 (例如: 迎合未來新能源趨勢)")
-      new_t_url = st.text_input(
-          "外部推薦連結 URL (例如: https://tw.stock.yahoo.com/...)"
-      )
-      new_t_stocks = st.text_input(
-          "包含的股票代碼 (用逗號隔開，例如: 2317.TW, 1504.TW)"
-      )
-      submitted = st.form_submit_button("確認新增分類")
-      if submitted and new_t_name:
-        stocks_list = [
-            s.strip().upper() for s in new_t_stocks.split(",") if s.strip()
-        ]
-        formatted_stocks = [
-            s if (".TW" in s or ".TWO" in s) else f"{s}.TW" for s in stocks_list
-        ]
-        st.session_state.theme_stocks[new_t_name] = {
-            "tag_desc": new_t_desc or "自訂概念股清單",
-            "external_url": new_t_url or "https://tw.stock.yahoo.com/",
-            "stocks": (
-                formatted_stocks
-                if formatted_stocks
-                else ["2330.TW", "0050.TW"]
-            ),
-        }
-        st.success(f"成功新增分類：{new_t_name}！")
-        st.rerun()
+  ranking_tab = st.radio(
+      "排行分類",
+      ["🚀 漲幅排行榜", "📉 跌幅排行榜", "🔥 成交量排行榜"],
+      horizontal=True,
+      label_visibility="collapsed",
+  )
 
-  if st.session_state.selected_theme is None:
-    st.caption("請選擇下方熱門選股維度，快速檢視精選標的：")
+  with st.spinner("正在載入即時市場數據..."):
+    all_data = fetch_yahoo_style_ranking()
 
-    themes = list(st.session_state.theme_stocks.keys())
-    for i in range(0, len(themes), 2):
-      cols = st.columns(2)
-      for j in range(2):
-        if i + j < len(themes):
-          t_name = themes[i + j]
-          t_info = st.session_state.theme_stocks[t_name]
-          with cols[j]:
-            st.markdown(
-                f"""
-                            <div class="grid-card">
-                                <div class="hot-badge">HOT</div>
-                                <div style="font-size:15px; font-weight:bold; color:#FFFFFF; margin-bottom:4px;">{t_name}</div>
-                                <div style="font-size:11px; color:#94A3B8;">{t_info['tag_desc']}</div>
-                            </div>
-                        """,
-                unsafe_allow_html=True,
-            )
-            if st.button(
-                "進入查看", key=f"grid_btn_{i+j}", use_container_width=True
-            ):
-              st.session_state.selected_theme = t_name
-              st.rerun()
+  if not all_data:
+    st.warning("目前無法取得市場排行資料，請稍後再試。")
   else:
-    current_theme = st.session_state.selected_theme
+    if "漲幅" in ranking_tab:
+      sorted_data = sorted(all_data, key=lambda x: x["pct"], reverse=True)
+    elif "跌幅" in ranking_tab:
+      sorted_data = sorted(all_data, key=lambda x: x["pct"], reverse=False)
+    else:
+      sorted_data = sorted(all_data, key=lambda x: x["volume"], reverse=True)
 
-    col_back, col_title = st.columns([1, 4])
-    with col_back:
-      if st.button("⬅️ 返回", use_container_width=True):
-        st.session_state.selected_theme = None
-        st.rerun()
-    with col_title:
+    # 模仿 Yahoo 列表標題樣式
+    st.markdown(
+        """
+        <div style="display: flex; background-color: #1E293B; padding: 10px; border-radius: 8px 8px 0 0; font-size: 12px; font-weight: bold; color: #94A3B8; border-bottom: 1px solid #334155;">
+            <div style="flex: 0.6; text-align: center;">名次</div>
+            <div style="flex: 2.2;">股名 / 股號</div>
+            <div style="flex: 1.2; text-align: right;">股價</div>
+            <div style="flex: 1.2; text-align: right;">漲跌</div>
+            <div style="flex: 1.2; text-align: right;">漲跌幅</div>
+            <div style="flex: 1.2; text-align: right;">最高</div>
+            <div style="flex: 1.2; text-align: right;">最低</div>
+            <div style="flex: 1.2; text-align: center;">操作</div>
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    for i, item in enumerate(sorted_data[:20], 1):
+      pct = item["pct"]
+      diff = item["diff"]
+      sign = "+" if diff >= 0 else ""
+      color = "#EF4444" if diff >= 0 else "#10B981"
+      bg_color = "#1E293B" if i % 2 == 0 else "#0F172A"
+
+      is_limit = abs(pct) >= 9.5
+      badge_limit = (
+          " 🔥" if (is_limit and pct > 0) else (" ❄️" if is_limit else "")
+      )
+
+      # 每一列使用 html 排版模仿 Yahoo 表格
       st.markdown(
-          f"<h4 style='margin:0; color:#38BDF8;'>{current_theme}</h4>",
+          f"""
+            <div style="display: flex; align-items: center; background-color: {bg_color}; padding: 10px 8px; font-size: 13px; border-bottom: 1px solid #1E293B;">
+                <div style="flex: 0.6; text-align: center; font-weight: bold; color: #38BDF8;">{i}</div>
+                <div style="flex: 2.2;">
+                    <div style="font-weight: bold; color: #FFFFFF;">{item['name']}{badge_limit}</div>
+                    <div style="font-size: 11px; color: #94A3B8;">{item['code']}.TW</div>
+                </div>
+                <div style="flex: 1.2; text-align: right; font-weight: bold; color: #FFFFFF;">${item['price']:,.2f}</div>
+                <div style="flex: 1.2; text-align: right; color: {color}; font-weight: bold;">{sign}{diff:,.2f}</div>
+                <div style="flex: 1.2; text-align: right; color: {color}; font-weight: bold;">{sign}{pct:.2f}%</div>
+                <div style="flex: 1.2; text-align: right; color: #CBD5E1;">${item['high']:,.2f}</div>
+                <div style="flex: 1.2; text-align: right; color: #CBD5E1;">${item['low']:,.2f}</div>
+                <div style="flex: 1.2; text-align: center;">
+            </div>
+        """,
           unsafe_allow_html=True,
       )
-
-    st.markdown(
-        f"<div style='font-size:12px; color:#94A3B8;"
-        f" margin-bottom:10px;'>{st.session_state.theme_stocks[current_theme]['tag_desc']}</div>",
-        unsafe_allow_html=True,
-    )
-
-    external_link = st.session_state.theme_stocks[current_theme].get(
-        "external_url", "https://tw.stock.yahoo.com/"
-    )
-    st.link_button(
-        f"🌐 點擊至外部平台查看【{current_theme}】完整推薦概念股解析",
-        external_link,
-        use_container_width=True,
-    )
-
-    sort_col1, sort_col2 = st.columns(2)
-    with sort_col1:
-      theme_sort = st.selectbox(
-          "排序方式",
-          ["預設順序", "漲跌幅高到低", "漲跌幅低到高", "股價高到低"],
-          key="theme_sort_box",
-      )
-
-    st.markdown(
-        '<div style="border-bottom: 1px solid #334155; margin-bottom: 10px;"></div>',
-        unsafe_allow_html=True,
-    )
-
-    theme_results = fetch_theme_stocks_dynamic(
-        current_theme, st.session_state.theme_stocks
-    )
-
-    if theme_sort == "漲跌幅高到低":
-      theme_results = sorted(theme_results, key=lambda x: x["pct"], reverse=True)
-    elif theme_sort == "漲跌幅低到高":
-      theme_results = sorted(
-          theme_results, key=lambda x: x["pct"], reverse=False
-      )
-    elif theme_sort == "股價高到低":
-      theme_results = sorted(
-          theme_results, key=lambda x: x["price"], reverse=True
-      )
-
-    for item in theme_results:
-      sym = item["symbol"]
-      if item["success"]:
-        cp = item["price"]
-        pct = item["pct"]
-        sign = "+" if pct >= 0 else ""
-        color = "#EF4444" if pct >= 0 else "#10B981"
-        code = item["code"]
-
-        is_limit = abs(pct) >= 9.5
-        badge_limit = (
-            " 🔥 漲停"
-            if (is_limit and pct > 0)
-            else (" ❄️ 跌停" if is_limit else "")
-        )
-        custom_tag = (
-            "71%存股族加入自選"
-            if code.startswith("00")
-            else ("EPS>3 優質股" if cp > 100 else "高殖利率關注")
-        )
-
-        col_info, col_btn = st.columns([2.5, 1])
-        with col_info:
-          st.markdown(
-              f"""
-                    <div style="font-size:15px; font-weight:bold; color:#FFFFFF;">
-                        {code} {item['name']}{badge_limit}
-                    </div>
-                    <div style="font-size:14px; margin-top:2px;">
-                        <span style="color:#38BDF8; font-weight:bold;">${cp:,.2f}</span> 
-                        <span style="color:{color}; font-weight:bold; margin-left:8px;">{sign}{pct:.2f}%</span>
-                    </div>
-                    <div style="font-size:11px; color:#94A3B8; margin-top:3px;">
-                        <span class="tag">{custom_tag}</span>
-                    </div>
-                """,
-              unsafe_allow_html=True,
-          )
-        with col_btn:
-          st.markdown("<br>", unsafe_allow_html=True)
-          if st.button("詳細分析", key=f"theme_{sym}", use_container_width=True):
-            select_symbol(sym)
-            st.session_state.nav_page = "📈 即時行情與個股分析"
-            st.session_state.selected_theme = None
-            st.rerun()
-        st.markdown(
-            '<div style="border-bottom: 1px solid #334155; margin: 8px 0;"></div>',
-            unsafe_allow_html=True,
-        )
+      # 為了讓按鈕正常觸發，使用 Streamlit 原生欄位包在下方或獨立行點擊
+      col_space, col_action_btn = st.columns([8, 2])
+      with col_action_btn:
+        if st.button("分析", key=f"rank_btn_{item['symbol']}_{i}", use_container_width=True):
+          select_symbol(item["symbol"])
+          st.session_state.nav_page = "📈 即時行情與個股分析"
+          st.rerun()
 
 
 # ================= 頁面三：我的自選股 =================
