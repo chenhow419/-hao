@@ -1044,7 +1044,7 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
             st.session_state.nav_page = "📈 即時行情與個股分析"
             st.rerun()
         with col_btn2:
-          st.markdown("<br>", unsafe_allow_json=True if "unsafe_allow_json" in globals() else False, unsafe_allow_html=True):
+          st.markdown("<br>", unsafe_allow_html=True)
           if st.button("刪除", key=f"watch_del_{sym}", use_container_width=True):
             st.session_state.watchlist.remove(sym)
             st.rerun()
