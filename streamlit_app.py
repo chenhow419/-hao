@@ -4,9 +4,9 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
-# ----------------- 1. 頁面設定 & 強制深色主題與組件 CSS -----------------
+# ----------------- 1. 頁面設定與自定義 CSS -----------------
 st.set_page_config(
-    page_title="台股 Pro - 專業看盤看板",
+    page_title="台股 Pro - 專業動態看板",
     page_icon="📈",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -23,15 +23,12 @@ st.markdown(
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
     }
-    
     body, p, span, div, label { color: #F8FAFC !important; }
-    
     .stTextInput input, .stSelectbox div[data-baseweb="select"] {
         background-color: #1E293B !important;
         color: #F8FAFC !important;
         border: 1px solid #475569 !important;
     }
-    
     div[data-baseweb="popover"], div[data-baseweb="menu"], div[role="listbox"] {
         background-color: #1E293B !important;
     }
@@ -43,7 +40,6 @@ st.markdown(
         background-color: #334155 !important;
         color: #38BDF8 !important;
     }
-    
     div.stButton > button {
         background-color: #1E293B !important;
         color: #F8FAFC !important;
@@ -56,7 +52,6 @@ st.markdown(
         color: #38BDF8 !important;
         border-color: #38BDF8 !important;
     }
-
     .trade-card {
         background-color: #1E293B;
         border-radius: 10px;
@@ -71,15 +66,11 @@ st.markdown(
         margin-bottom: 12px;
         border: 1px solid #334155;
     }
-    /* 台股慣例：紅漲 (#EF4444) 綠跌 (#10B981) */
     .up-border { border: 1.5px solid #EF4444; }
     .down-border { border: 1.5px solid #10B981; }
-    .limit-border { border: 2px solid #F59E0B; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
     .etf-border { border: 1.5px solid #38BDF8; }
-    
     .card-title { font-size: 11px; color: #94A3B8 !important; margin-bottom: 2px; }
     .card-val { font-size: 15px; font-weight: bold; }
-    
     .tag {
         background-color: #334155;
         color: #F8FAFC !important;
@@ -88,7 +79,6 @@ st.markdown(
         border-radius: 4px;
         margin-right: 6px;
     }
-    
     .grid-card {
         background-color: #1E293B;
         border: 1px solid #334155;
@@ -114,7 +104,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 狀態初始化
+# ----------------- 2. 狀態初始化 (支援動態浮動增刪主題) -----------------
 if "history" not in st.session_state:
   st.session_state.history = ["2330.TW", "0050.TW"]
 if "watchlist" not in st.session_state:
@@ -125,6 +115,68 @@ if "nav_page" not in st.session_state:
   st.session_state.nav_page = "📈 即時行情與個股分析"
 if "selected_theme" not in st.session_state:
   st.session_state.selected_theme = None
+
+# 將分類改為存放在 session_state 中，實現完全「動態浮動（可隨時新增/修改）」
+if "theme_stocks" not in st.session_state:
+  st.session_state.theme_stocks = {
+      "🤖 AI 伺服器與散熱": {
+          "tag_desc": "AI 概念強勢供應鏈",
+          "external_url": "https://tw.stock.yahoo.com/class-quote?category=AI",
+          "stocks": [
+              "2382.TW",
+              "3231.TW",
+              "2376.TW",
+              "3017.TW",
+              "3653.TW",
+              "6669.TW",
+          ],
+      },
+      "⚡ 半導體重量權值": {
+          "tag_desc": "護國神山與高階晶片",
+          "external_url": (
+              "https://tw.stock.yahoo.com/class-quote?category=semiconductor"
+          ),
+          "stocks": [
+              "2330.TW",
+              "2454.TW",
+              "2303.TW",
+              "3661.TW",
+              "2379.TW",
+              "3034.TW",
+          ],
+      },
+      "💰 熱門高股息與市值ETF": {
+          "tag_desc": "71% 存股族最愛配置",
+          "external_url": "https://tw.stock.yahoo.com/class-quote?category=etf",
+          "stocks": [
+              "0050.TW",
+              "0056.TW",
+              "00878.TW",
+              "00919.TW",
+              "00929.TW",
+              "00713.TW",
+          ],
+      },
+      "🚢 航運與散裝航運": {
+          "tag_desc": "景氣循環與高殖利率",
+          "external_url": (
+              "https://tw.stock.yahoo.com/class-quote?category=shipping"
+          ),
+          "stocks": ["2603.TW", "2609.TW", "2615.TW", "2606.TW"],
+      },
+      "🏦 金融與大型權值股": {
+          "tag_desc": "穩健收益金控首選",
+          "external_url": (
+              "https://tw.stock.yahoo.com/class-quote?category=financial"
+          ),
+          "stocks": ["2881.TW", "2882.TW", "5871.TW"],
+      },
+      "🔥 近期熱門焦點標的": {
+          "tag_desc": "市場高關注度熱股",
+          "external_url": "https://tw.stock.yahoo.com/trending/stocks",
+          "stocks": ["2330.TW", "2317.TW", "2327.TW", "0050.TW", "2454.TW"],
+      },
+  }
 
 
 def select_symbol(sym):
@@ -142,7 +194,6 @@ def resolve_symbol(user_input):
   return clean
 
 
-# 完整台股中文名稱對照表
 TW_STOCK_NAMES = {
     "2330.TW": "台積電",
     "2317.TW": "鴻海",
@@ -174,37 +225,8 @@ TW_STOCK_NAMES = {
     "2327.TW": "國巨",
 }
 
-# 豐富的分類與概念股資料
-THEME_STOCKS = {
-    "🤖 AI 伺服器與散熱": {
-        "tag_desc": "AI 概念強勢供應鏈",
-        "stocks": ["2382.TW", "3231.TW", "2376.TW", "3017.TW", "3653.TW", "6669.TW"],
-    },
-    "⚡ 半導體重量權值": {
-        "tag_desc": "護國神山與高階晶片",
-        "stocks": ["2330.TW", "2454.TW", "2303.TW", "3661.TW", "2379.TW", "3034.TW"],
-    },
-    "💰 熱門高股息與市值ETF": {
-        "tag_desc": "71% 存股族最愛配置",
-        "stocks": ["0050.TW", "0056.TW", "00878.TW", "00919.TW", "00929.TW", "00713.TW"],
-    },
-    "🚢 航運與散裝航運": {
-        "tag_desc": "景氣循環與高殖利率",
-        "stocks": ["2603.TW", "2609.TW", "2615.TW", "2606.TW"],
-    },
-    "🏦 金融與大型權值股": {
-        "tag_desc": "穩健收益金控首選",
-        "stocks": ["2881.TW", "2882.TW", "5871.TW"],
-    },
-    "🔥 近期熱門焦點標的": {
-        "tag_desc": "市場高關注度熱股",
-        "stocks": ["2330.TW", "2317.TW", "2327.TW", "0050.TW", "2454.TW"],
-    },
-}
 
-# ----------------- 2. 資料抓取函數 (全面加上快取防限流) -----------------
-
-
+# ----------------- 3. 資料抓取函數 -----------------
 @st.cache_data(ttl=60)
 def fetch_market_indices():
   indices = {"台股加權指數": "^TWII", "櫃買指數": "^TWOII"}
@@ -297,9 +319,8 @@ def fetch_realtime_hot_stocks():
   return sorted(data_list, key=lambda x: x["volume"], reverse=True)
 
 
-@st.cache_data(ttl=300)
-def fetch_theme_stocks_cached(theme_name):
-  theme_symbols = THEME_STOCKS[theme_name]["stocks"]
+def fetch_theme_stocks_dynamic(theme_name, theme_dict):
+  theme_symbols = theme_dict[theme_name]["stocks"]
   results = []
   for sym in theme_symbols:
     try:
@@ -380,7 +401,7 @@ def fetch_watchlist_cached(symbols_tuple):
   return results
 
 
-# ----------------- 3. UI 介面與導航 -----------------
+# ----------------- 4. UI 介面與導航 -----------------
 st.title("📈 股市行情 Pro")
 
 pages = ["📈 即時行情與個股分析", "🏷️ 排行選股專區", "⭐ 我的自選股"]
@@ -407,7 +428,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
   if indices_data:
     idx_cols = st.columns(len(indices_data))
     for i, (name, val) in enumerate(indices_data.items()):
-      # 台股慣例：漲紅 跌綠
       color = "#EF4444" if val["diff"] >= 0 else "#10B981"
       sign = "+" if val["diff"] >= 0 else ""
       with idx_cols[i]:
@@ -447,7 +467,11 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
     color = "#EF4444" if item["pct"] >= 0 else "#10B981"
     tag_type = "ETF" if item["code"].startswith("00") else "股票"
     is_limit = abs(item["pct"]) >= 9.5
-    badge_limit = " 🔥 漲停" if (is_limit and item["pct"] > 0) else (" ❄️ 跌停" if is_limit else "")
+    badge_limit = (
+        " 🔥 漲停"
+        if (is_limit and item["pct"] > 0)
+        else (" ❄️ 跌停" if is_limit else "")
+    )
 
     col_info, col_btn = st.columns([2, 1])
     with col_info:
@@ -467,7 +491,9 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
           f"""<div style='text-align: right; color: {color}; font-weight: bold; font-size: 1.05rem; padding-top: 4px;'>{sign}{item['pct']}%</div>""",
           unsafe_allow_html=True,
       )
-      if st.button("查看分析", key=f"hot_{item['symbol']}_{idx}", use_container_width=True):
+      if st.button(
+          "查看分析", key=f"hot_{item['symbol']}_{idx}", use_container_width=True
+      ):
         select_symbol(item["symbol"])
         st.rerun()
     st.markdown(
@@ -631,7 +657,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
                 unsafe_allow_html=True,
             )
 
-        # ================= 圖表繪製與互動設定 =================
         fig = make_subplots(
             rows=2,
             cols=1,
@@ -673,7 +698,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
             row=1,
             col=1,
         )
-        # 台股慣例成交量配色：紅漲綠跌
         colors = [
             "#EF4444"
             if row["Close"] >= row["Open"]
@@ -718,16 +742,48 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 elif st.session_state.nav_page == "🏷️ 排行選股專區":
   st.subheader("📊 智慧排行選股中心")
 
+  # 🌟 增加「動態浮動新增分類」的展開表單，讓使用者可以直接在畫面上新增自訂概念股
+  with st.expander("➕ 點擊展開：動態新增自訂概念股分類"):
+    with st.form("add_theme_form"):
+      new_t_name = st.text_input("分類名稱 (例如: 🚗 電動車概念股)")
+      new_t_desc = st.text_input("分類簡介 (例如: 迎合未來新能源趨勢)")
+      new_t_url = st.text_input(
+          "外部推薦連結 URL (例如: https://tw.stock.yahoo.com/...)"
+      )
+      new_t_stocks = st.text_input(
+          "包含的股票代碼 (用逗號隔開，例如: 2317.TW, 1504.TW)"
+      )
+      submitted = st.form_submit_button("確認新增分類")
+      if submitted and new_t_name:
+        stocks_list = [
+            s.strip().upper() for s in new_t_stocks.split(",") if s.strip()
+        ]
+        # 自動補上 .TW 尾綴
+        formatted_stocks = [
+            s if (".TW" in s or ".TWO" in s) else f"{s}.TW" for s in stocks_list
+        ]
+        st.session_state.theme_stocks[new_t_name] = {
+            "tag_desc": new_t_desc or "自訂概念股清單",
+            "external_url": new_t_url or "https://tw.stock.yahoo.com/",
+            "stocks": (
+                formatted_stocks
+                if formatted_stocks
+                else ["2330.TW", "0050.TW"]
+            ),
+        }
+        st.success(f"成功新增分類：{new_t_name}！")
+        st.rerun()
+
   if st.session_state.selected_theme is None:
     st.caption("請選擇下方熱門選股維度，快速檢視精選標的：")
 
-    themes = list(THEME_STOCKS.keys())
+    themes = list(st.session_state.theme_stocks.keys())
     for i in range(0, len(themes), 2):
       cols = st.columns(2)
       for j in range(2):
         if i + j < len(themes):
           t_name = themes[i + j]
-          t_info = THEME_STOCKS[t_name]
+          t_info = st.session_state.theme_stocks[t_name]
           with cols[j]:
             st.markdown(
                 f"""
@@ -739,7 +795,9 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
                         """,
                 unsafe_allow_html=True,
             )
-            if st.button("進入查看", key=f"grid_btn_{i+j}", use_container_width=True):
+            if st.button(
+                "進入查看", key=f"grid_btn_{i+j}", use_container_width=True
+            ):
               st.session_state.selected_theme = t_name
               st.rerun()
   else:
@@ -758,29 +816,46 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
 
     st.markdown(
         f"<div style='font-size:12px; color:#94A3B8;"
-        f" margin-bottom:10px;'>{THEME_STOCKS[current_theme]['tag_desc']}</div>",
+        f" margin-bottom:10px;'>{st.session_state.theme_stocks[current_theme]['tag_desc']}</div>",
         unsafe_allow_html=True,
     )
-    
-    # 增加排序功能
+
+    external_link = st.session_state.theme_stocks[current_theme].get(
+        "external_url", "https://tw.stock.yahoo.com/"
+    )
+    st.link_button(
+        f"🌐 點擊至外部平台查看【{current_theme}】完整推薦概念股解析",
+        external_link,
+        use_container_width=True,
+    )
+
     sort_col1, sort_col2 = st.columns(2)
     with sort_col1:
-      theme_sort = st.selectbox("排序方式", ["預設順序", "漲跌幅高到低", "漲跌幅低到高", "股價高到低"], key="theme_sort_box")
-    
+      theme_sort = st.selectbox(
+          "排序方式",
+          ["預設順序", "漲跌幅高到低", "漲跌幅低到高", "股價高到低"],
+          key="theme_sort_box",
+      )
+
     st.markdown(
         '<div style="border-bottom: 1px solid #334155; margin-bottom: 10px;"></div>',
         unsafe_allow_html=True,
     )
 
-    theme_results = fetch_theme_stocks_cached(current_theme)
-    
-    # 執行排序邏輯
+    theme_results = fetch_theme_stocks_dynamic(
+        current_theme, st.session_state.theme_stocks
+    )
+
     if theme_sort == "漲跌幅高到低":
       theme_results = sorted(theme_results, key=lambda x: x["pct"], reverse=True)
     elif theme_sort == "漲跌幅低到高":
-      theme_results = sorted(theme_results, key=lambda x: x["pct"], reverse=False)
+      theme_results = sorted(
+          theme_results, key=lambda x: x["pct"], reverse=False
+      )
     elif theme_sort == "股價高到低":
-      theme_results = sorted(theme_results, key=lambda x: x["price"], reverse=True)
+      theme_results = sorted(
+          theme_results, key=lambda x: x["price"], reverse=True
+      )
 
     for item in theme_results:
       sym = item["symbol"]
@@ -788,12 +863,15 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
         cp = item["price"]
         pct = item["pct"]
         sign = "+" if pct >= 0 else ""
-        # 台股慣例：紅漲綠跌
         color = "#EF4444" if pct >= 0 else "#10B981"
         code = item["code"]
 
         is_limit = abs(pct) >= 9.5
-        badge_limit = " 🔥 漲停" if (is_limit and pct > 0) else (" ❄️ 跌停" if is_limit else "")
+        badge_limit = (
+            " 🔥 漲停"
+            if (is_limit and pct > 0)
+            else (" ❄️ 跌停" if is_limit else "")
+        )
         custom_tag = (
             "71%存股族加入自選"
             if code.startswith("00")
@@ -853,11 +931,14 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
         else:
           st.warning("該標的已在清單中")
 
-  # 自選股排序功能列
   if st.session_state.watchlist:
     w_sort_col1, w_sort_col2 = st.columns(2)
     with w_sort_col1:
-      watch_sort = st.selectbox("清單排序", ["預設排序", "漲跌幅由高到低", "漲跌幅由低到高", "代碼排序"], key="watchlist_sort_box")
+      watch_sort = st.selectbox(
+          "清單排序",
+          ["預設排序", "漲跌幅由高到低", "漲跌幅由低到高", "代碼排序"],
+          key="watchlist_sort_box",
+      )
 
   st.markdown(
       '<div style="border-bottom: 1px solid #334155; margin: 10px 0;"></div>',
@@ -870,14 +951,19 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
     watchlist_tuple = tuple(st.session_state.watchlist)
     watchlist_results = fetch_watchlist_cached(watchlist_tuple)
 
-    # 執行自選股排序
-    if 'watch_sort' in locals():
+    if "watch_sort" in locals():
       if watch_sort == "漲跌幅由高到低":
-        watchlist_results = sorted(watchlist_results, key=lambda x: x.get("pct", 0), reverse=True)
+        watchlist_results = sorted(
+            watchlist_results, key=lambda x: x.get("pct", 0), reverse=True
+        )
       elif watch_sort == "漲跌幅由低到高":
-        watchlist_results = sorted(watchlist_results, key=lambda x: x.get("pct", 0), reverse=False)
+        watchlist_results = sorted(
+            watchlist_results, key=lambda x: x.get("pct", 0), reverse=False
+        )
       elif watch_sort == "代碼排序":
-        watchlist_results = sorted(watchlist_results, key=lambda x: x.get("code", ""))
+        watchlist_results = sorted(
+            watchlist_results, key=lambda x: x.get("code", "")
+        )
 
     for item in watchlist_results:
       sym = item["symbol"]
@@ -885,13 +971,16 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
         cp = item["price"]
         pct = item["pct"]
         sign = "+" if pct >= 0 else ""
-        # 台股慣例：紅漲綠跌
         color = "#EF4444" if pct >= 0 else "#10B981"
         code = item["code"]
         tag_type = "ETF" if code.startswith("00") else "股票"
-        
+
         is_limit = abs(pct) >= 9.5
-        badge_limit = " 🔥 漲停" if (is_limit and pct > 0) else (" ❄️ 跌停" if is_limit else "")
+        badge_limit = (
+            " 🔥 漲停"
+            if (is_limit and pct > 0)
+            else (" ❄️ 跌停" if is_limit else "")
+        )
 
         col_info, col_btn1, col_btn2 = st.columns([2.2, 1, 1])
         with col_info:
