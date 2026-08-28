@@ -70,7 +70,7 @@ st.markdown(
     .down-border { border: 1.5px solid #10B981; }
     .etf-border { border: 1.5px solid #38BDF8; }
     .card-title { font-size: 11px; color: #94A3B8 !important; margin-bottom: 2px; }
-    .card-val { font-size: 15px; font-weight: bold; }
+    .card-val { font-size: 14px; font-weight: bold; }
     .tag {
         background-color: #334155;
         color: #F8FAFC !important;
@@ -104,7 +104,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ----------------- 2. 狀態初始化 (支援動態浮動增刪主題) -----------------
+# ----------------- 2. 狀態初始化 -----------------
 if "history" not in st.session_state:
   st.session_state.history = ["2330.TW", "0050.TW"]
 if "watchlist" not in st.session_state:
@@ -116,7 +116,6 @@ if "nav_page" not in st.session_state:
 if "selected_theme" not in st.session_state:
   st.session_state.selected_theme = None
 
-# 將分類改為存放在 session_state 中，實現完全「動態浮動（可隨時新增/修改）」
 if "theme_stocks" not in st.session_state:
   st.session_state.theme_stocks = {
       "🤖 AI 伺服器與散熱": {
@@ -631,7 +630,9 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
                 unsafe_allow_html=True,
             )
         else:
-          buy_high = ma20_val
+          # 將買區改成區間範圍（例如：20MA的98% ~ 20MA）
+          buy_low = round(ma20_val * 0.98, 2)
+          buy_high_val = ma20_val
           stop_loss = round(min(ma60_val * 0.97, latest["Lower"]), 2)
 
           c1, c2, c3 = st.columns(3)
@@ -639,7 +640,7 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
             st.markdown(
                 f'<div class="trade-card down-border"><div'
                 ' class="card-title">建議買區</div><div class="card-val"'
-                f' style="color:#10B981">${buy_high}</div></div>',
+                f' style="color:#10B981">${buy_low} ~ ${buy_high_val}</div></div>',
                 unsafe_allow_html=True,
             )
           with c2:
@@ -651,7 +652,7 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
             )
           with c3:
             st.markdown(
-                f'<div class="trade-card trade-card" style="border: 1.5px solid'
+                f'<div class="trade-card" style="border: 1.5px solid'
                 f' #F59E0B;"><div class="card-title">停損設定</div><div'
                 f' class="card-val" style="color:#F59E0B">${stop_loss}</div></div>',
                 unsafe_allow_html=True,
@@ -742,7 +743,6 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
 elif st.session_state.nav_page == "🏷️ 排行選股專區":
   st.subheader("📊 智慧排行選股中心")
 
-  # 🌟 增加「動態浮動新增分類」的展開表單，讓使用者可以直接在畫面上新增自訂概念股
   with st.expander("➕ 點擊展開：動態新增自訂概念股分類"):
     with st.form("add_theme_form"):
       new_t_name = st.text_input("分類名稱 (例如: 🚗 電動車概念股)")
@@ -758,7 +758,6 @@ elif st.session_state.nav_page == "🏷️ 排行選股專區":
         stocks_list = [
             s.strip().upper() for s in new_t_stocks.split(",") if s.strip()
         ]
-        # 自動補上 .TW 尾綴
         formatted_stocks = [
             s if (".TW" in s or ".TWO" in s) else f"{s}.TW" for s in stocks_list
         ]
