@@ -234,6 +234,8 @@ def fetch_market_indices():
     try:
       t = yf.Ticker(symbol)
       hist = t.history(period="2d")
+      if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
       if len(hist) >= 2:
         cp = hist["Close"].iloc[-1]
         pp = hist["Close"].iloc[-2]
@@ -298,6 +300,8 @@ def fetch_realtime_hot_stocks():
     try:
       t = yf.Ticker(sym)
       hist = t.history(period="2d")
+      if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
       if len(hist) >= 2:
         cp = hist["Close"].iloc[-1]
         pp = hist["Close"].iloc[-2]
@@ -325,6 +329,8 @@ def fetch_theme_stocks_dynamic(theme_name, theme_dict):
     try:
       t = yf.Ticker(sym)
       hist = t.history(period="2d")
+      if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
       details = get_company_details(sym)
       if len(hist) >= 2:
         cp = hist["Close"].iloc[-1]
@@ -366,6 +372,8 @@ def fetch_watchlist_cached(symbols_tuple):
     try:
       t = yf.Ticker(sym)
       hist = t.history(period="2d")
+      if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
       details = get_company_details(sym)
       if len(hist) >= 2:
         cp = hist["Close"].iloc[-1]
@@ -540,14 +548,18 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
     try:
       ticker = yf.Ticker(symbol)
       df = ticker.history(period="1y")
+
+      # 修正：確保 yfinance 欄位結構為單層，避免 MultiIndex 導致 MA 欄位抓取失敗
+      if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
       details = get_company_details(symbol)
 
-      if df.empty or len(df) < 30:
-        st.error("查無資料，請確認輸入代碼正確！")
+      if df.empty or len(df) < 20:
+        st.error("查無資料或歷史天數不足，請確認輸入代碼正確！")
       else:
         is_etf = symbol.startswith("00") or "ETF" in symbol.upper()
 
-        # 計算當天股價與漲跌幅
         latest = df.iloc[-1]
         prev_close = df["Close"].iloc[-2] if len(df) >= 2 else latest["Close"]
         close_p = round(latest["Close"], 2)
@@ -612,14 +624,27 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
         df["Upper"] = df["MA20"] + (df["STD20"] * 2)
         df["Lower"] = df["MA20"] - (df["STD20"] * 2)
 
-        ma20_val = round(latest["MA20"], 2)
-        ma60_val = round(latest["MA60"], 2)
+        latest_ma = df.iloc[-1]
+        ma20_val = (
+            round(latest_ma["MA20"], 2)
+            if not pd.isna(latest_ma["MA20"])
+            else close_p
+        )
+        ma60_val = (
+            round(latest_ma["MA60"], 2)
+            if not pd.isna(latest_ma["MA60"])
+            else close_p
+        )
         ma120_val = (
-            round(latest["MA120"], 2)
-            if not pd.isna(latest["MA120"])
+            round(latest_ma["MA120"], 2)
+            if not pd.isna(latest_ma["MA120"])
             else round(ma60_val * 0.95, 2)
         )
-        target_sell = round(latest["Upper"], 2)
+        target_sell = (
+            round(latest_ma["Upper"], 2)
+            if not pd.isna(latest_ma["Upper"])
+            else round(close_p * 1.05, 2)
+        )
 
         if is_etf:
           c1, c2, c3 = st.columns(3)
@@ -647,7 +672,10 @@ if st.session_state.nav_page == "📈 即時行情與個股分析":
         else:
           buy_low = round(ma20_val * 0.98, 2)
           buy_high_val = ma20_val
-          stop_loss = round(min(ma60_val * 0.97, latest["Lower"]), 2)
+          lower_band = (
+              latest_ma["Lower"] if not pd.isna(latest_ma["Lower"]) else close_p
+          )
+          stop_loss = round(min(ma60_val * 0.97, lower_band), 2)
 
           c1, c2, c3 = st.columns(3)
           with c1:
@@ -1016,7 +1044,7 @@ elif st.session_state.nav_page == "⭐ 我的自選股":
             st.session_state.nav_page = "📈 即時行情與個股分析"
             st.rerun()
         with col_btn2:
-          st.markdown("<br>", unsafe_allow_html=True)
+          st.markdown("<br>", unsafe_allow_json=True if "unsafe_allow_json" in globals() else False, unsafe_allow_html=True):
           if st.button("刪除", key=f"watch_del_{sym}", use_container_width=True):
             st.session_state.watchlist.remove(sym)
             st.rerun()
