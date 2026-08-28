@@ -145,7 +145,7 @@ if "theme_stocks" not in st.session_state:
           ],
       },
       "💰 熱門高股息與市值ETF": {
-          "tag_desc": "71% 存股族最愛配置",
+          "tag_desc": "存股族最愛配置",
           "external_url": "https://tw.stock.yahoo.com/class-quote?category=etf",
           "stocks": [
               "0050.TW",
